@@ -43,6 +43,8 @@ loadSnippet().show()
 - **Direct Access to GitHub:** Open the *VEX Snippet Library* page from the GitHub button.
 - **Connection Check:** Verify the internet connection to ensure you can reload snippets without issues.
 
+![preview](source/preview_publisher.jpg)
+
 ---
 
 
