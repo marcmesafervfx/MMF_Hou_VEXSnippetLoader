@@ -1,5 +1,5 @@
 # VEXSnippetTool - Your Snippet manager in Houdini!
-![preview](source/preview.jpg) ![preview](source/append_code.jpg)
+![preview](source/preview.jpg)
 ## 🚀 Installation
 
 Let's get started! To install **VEXSnippetTool** and take advantage of its powerful features, follow these simple steps:
@@ -43,7 +43,7 @@ loadSnippet().show()
 - **Direct Access to GitHub:** Open the *VEX Snippet Library* page from the GitHub button.
 - **Connection Check:** Verify the internet connection to ensure you can reload snippets without issues.
 
-![preview](source/preview_publisher.jpg)
+![preview](source/preview_publisher.jpg) ![preview](source/append_code.gif)
 
 ---
 
