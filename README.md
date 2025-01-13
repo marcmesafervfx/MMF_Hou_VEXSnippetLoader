@@ -58,6 +58,8 @@ For a smoother experience, keep the following in mind:
 - **Editor without Autocomplete:** Currently, the editor does not have autocomplete. The ideal workflow is to write the code in a wrangler and then copy it into the editor.
 - **Supported Wranglers:** The tool currently supports the following types of wranglers: `gaswrangle`, `attribwrangle`, `popwrangle`, and `geometrywrangle`. If you need more types, feel free to submit a request to add them!
 
+![preview](source/refresh.gif)
+
 ---
 
 
