@@ -12,12 +12,12 @@ Let's get started! To install **VEXSnippetTool** and take advantage of its power
 4. Create a **Shelf** or use an existing one.
 5. Add a new **Tool** and paste the following code in the `Script` tab (make sure to adjust the path according to your setup):
 ```python
-   import sys  
-   sys.path.append("Path where the VEXSnippetTool folder is located")  
+import sys  
+sys.path.append("Path where the VEXSnippetTool folder is located")  
    
-   from snippets import loadSnippet  
+from snippets import loadSnippet  
    
-   loadSnippet().show()
+loadSnippet().show()
 ```
 
 6. If you want to customize the **icon** of the tool, go to the `Options` tab and change the image. The default icon is available in:  
