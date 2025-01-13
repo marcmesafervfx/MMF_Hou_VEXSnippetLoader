@@ -1,6 +1,6 @@
 
 ![banner](source/banner.png)
-![preview](source/preview.jpg)
+
 ## 🚀 Installation
 
 Let's get started! To install **VEXSnippetTool** and take advantage of its powerful features, follow these simple steps:
@@ -23,6 +23,8 @@ loadSnippet().show()
 
 6. If you want to customize the **icon** of the tool, go to the `Options` tab and change the image. The default icon is available in:  
    `./VEXSnippetTool/images/loadsnippet.png`.
+
+![preview](source/preview.jpg)
 
 ---
 
