@@ -21,7 +21,7 @@ Let's get started! To install **VEXSnippetTool** and take advantage of its power
 ```
 
 6. If you want to customize the **icon** of the tool, go to the `Options` tab and change the image. The default icon is available in:  
-   `VEXSnippetTool/images/loadsnippet.png`.
+   `./VEXSnippetTool/images/loadsnippet.png`.
 
 ---
 
