@@ -5,7 +5,7 @@
 Let's get started! To install **VEXSnippetTool** and take advantage of its powerful features, follow these simple steps:
 
 1. **Download** the `VEXSnippetTool` folder from this repository.
-2. **Copy** the downloaded folder to the $HOUDINI_USER_PREF_DIR (`C:\Users\{Your User}\Documents\houdini{Your Houdini Version}`):
+2. **Copy** the downloaded folder to the `$HOUDINI_USER_PREF_DIR` (`C:\Users\{Your User}\Documents\houdini{Your Houdini Version}`):
    > *Tip:* If you prefer, you can organize the folder inside subfolders, but make sure to remember the exact path for the next steps!
 
 3. **Launch** Houdini and open the interface.
