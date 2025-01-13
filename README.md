@@ -1,5 +1,5 @@
 
-![preview](source/banner.png)
+![banner](source/banner.png)
 
 # VEXSnippetTool - Your Snippet manager in Houdini!
 ![preview](source/preview.jpg)
