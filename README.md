@@ -31,7 +31,7 @@ loadSnippet().show()
 **VEXSnippetTool** is much more than just a tool. With its advanced features, it allows you to manage your VEX code in a more efficient way:
 
 ### 🌐 Libraries:
-- **Online:** Access the famous *VEX Snippet Library* and automatically reload the snippets when they are updated.
+- **Online:** Access the *VEX Snippet Library* and automatically reload the snippets when they are updated.
 - **Personal:** Create and organize your own snippets with full flexibility.
 
 ### ⚙️ Functionality:
