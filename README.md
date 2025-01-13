@@ -1,4 +1,4 @@
-# VEXSnippetTool - Your ultimate companion for managing Snippets in Houdini!
+# VEXSnippetTool - Your Snippets manager in Houdini!
 ![preview](source/preview.jpg)
 ## 🚀 Installation
 
