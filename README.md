@@ -62,6 +62,7 @@ Here are some known issues. If you encounter any others, please report them on G
 
 - **STMap:** The STMap code isn't capturing the title name correctly.
 - **Refresh:** When refreshing, the snippet type and list reset, which causes the expected effect but creates the inconvenience of having to reselect the desired code.
+- **Append:** When appending, the code is added to the wrangler jumping to the next line. This is the expected behavior, but when there isn't text, it jumps to the next line anyway.
 
 ---
 
