@@ -25,6 +25,7 @@ Let's get started! To install **VEXSnippetTool** and take advantage of its power
 
 ---
 
+
 ## ✨ Features
 
 **VEXSnippetTool** is much more than just a tool. With its advanced features, it allows you to manage your VEX code in a more efficient way:
@@ -44,6 +45,7 @@ Let's get started! To install **VEXSnippetTool** and take advantage of its power
 
 ---
 
+
 ## 💡 Important Notes
 
 For a smoother experience, keep the following in mind:
@@ -55,6 +57,7 @@ For a smoother experience, keep the following in mind:
 
 ---
 
+
 ## ⚠️ Known Issues
 ### v0.0.0
 Here are some known issues. If you encounter any others, please report them on GitHub:
@@ -64,5 +67,6 @@ Here are some known issues. If you encounter any others, please report them on G
 - **Append:** When appending, the code is added to the wrangler jumping to the next line. This is the expected behavior, but when there isn't text, it jumps to the next line anyway.
 
 ---
+
 
 Enjoy using **VEXSnippetTool** and take your Houdini projects to the next level! 🎉
