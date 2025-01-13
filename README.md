@@ -26,7 +26,6 @@ loadSnippet().show()
 
 ![preview](source/preview.jpg)
 
----
 
 
 ## ✨ Features
@@ -49,7 +48,6 @@ loadSnippet().show()
 ![preview](source/preview_publisher.jpg)
 ![preview](source/append_code.gif)
 
----
 
 
 ## 💡 Important Notes
@@ -63,7 +61,6 @@ For a smoother experience, keep the following in mind:
 
 ![preview](source/refresh.gif)
 
----
 
 
 ## ⚠️ Known Issues
@@ -74,7 +71,6 @@ Here are some known issues. If you encounter any others, please report them on G
 - **Refresh:** When refreshing, the snippet type and list reset, which causes the expected effect but creates the inconvenience of having to reselect the desired code.
 - **Append:** When appending, the code is added to the wrangler jumping to the next line. This is the expected behavior, but when there isn't text, it jumps to the next line anyway.
 
----
 
 
 Enjoy using **VEXSnippetTool** and take your Houdini projects to the next level! 🎉
