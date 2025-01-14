@@ -44,7 +44,7 @@ def fetch_github_readme():
         
         processed_entries = 0
         
-        for i, line in enumerate(lines):
+        for line in lines:
             # Don't strip whitespace from code lines
             if not in_code_block:
                 line = line.strip()
@@ -62,7 +62,7 @@ def fetch_github_readme():
                 continue
             
             # Title detection
-            if '**' in line and not 'Input' in line and not 'Mode:' in line and not '*Reference Code*' in line and not '[!' in line:
+            if '**' in line and not 'Input' in line and not 'Output' in line and not 'Mode:' in line and not '*Reference Code*' in line and not '[!' in line:
                 title_match = re.search(r'\*\*([^*]+)\*\*', line)
                 if title_match:
                     current_title = title_match.group(1).strip()
