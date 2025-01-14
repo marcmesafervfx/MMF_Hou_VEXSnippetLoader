@@ -1,0 +1,587 @@
+{
+    "Points": {
+        "grp_to_array": {
+            "reference_code": "84965172",
+            "section": "Group To Array",
+            "code": "\"\"\" Convert group string to group. \"\"\";\n\n// Get red group string and expand it to get a point array.\nstring pt_grp = chs(\"point_group\");\nint grp[] = expandpointgroup(0, pt_grp);\n\n// Set detail group array value.\nsetdetailattrib(0, \"grp_array\", grp);"
+        },
+        "pc_array": {
+            "reference_code": "49343432",
+            "section": "Point Cloud To Array",
+            "code": "\"\"\" Point cloud to attribute array, \"\"\";\n\n// Create point cloud based on distance and maximum points\nint pc = pcopen(1, 'P', v@P, ch('distance'), chi('maxpts'));\n\n// Initialize pts array and iterate for each point in the point cloud.\nint pts[];\nwhile (pciterate(pc) > 0){\n    \n    // Initialize current point number.\n    int currentpt;\n    \n    // Import current point number.\n    pcimport(pc, 'point.number', currentpt);\n    \n    // Append to point array.\n    append(pts, currentpt);\n}\n\n// Export points array.\ni[]@nearpts = pts;"
+        },
+        "occlusion": {
+            "reference_code": "61836333",
+            "section": "Ambient Occlusion Attribute",
+            "code": "\"\"\" Compute ambient occlusion. \"\"\"; \n\n// Create function to random vector in a hemisphere. You can use sample_hemisphere instead.\nfunction vector hemisphere(vector norm; vector2 seed){\n    \n    // Initialize up vector\n    vector up = {0,1,0};\n    \n    // Get normal offset matrix.\n    matrix3 offset = dihedral(up, norm);\n    \n    // Compute direction using seed values.\n    vector dir = normalize(set(fit01(rand(seed.x), -1, 1),\n                               rand(seed.y),\n                               fit01(rand(seed.x+123), -1, 1)));\n    \n    // Return direction vector.                 \n    return dir*offset;\n}\n\n// Get iteration, radius, source min and source max values.\nint iter = chi(\"iterations\"); \nfloat rad = chf(\"radius\"); \nfloat src_min = chf(\"source_min\");\nfloat src_max = chf(\"source_max\");\n\n// Peak position to avoid intersection with itself.\nvector peak_pos = v@P+v@N*1e-6;\n\n// Initialize occlusion values.\nfloat occ=0.0;\n\n// Iterate for each iteration value.\nfor(int i = 0; i < iter; i++){\n    \n    // Compute seed value using interation value.\n    vector2 seed = rand(@ptnum + i);\n    \n    // Get direction vector.\n    vector dir = hemisphere(v@N, seed);\n    \n    // Initialize position and uvw values.\n    vector inter_pos, uvw;\n    \n    // Get primitive intersection values and overwrite intersect position and uvw.\n    float prim = intersect(0,peak_pos, dir*rad, inter_pos, uvw);\n    \n    // If the primitive intersects, add value to the occlusion based on radius distance.\n    if(prim != -1) occ += fit(distance(inter_pos, v@P), 0, rad, 1, 0);\n\n}\n\n// Export color ambient occlusion dividing the occlusion value by the iterations.\n// Then, fit values to contrast the color attribute.\nv@Cd = fit(1-occ/iter, src_min, src_max, 0, 1);"
+        },
+        "blur_attrib": {
+            "reference_code": "66979067",
+            "section": "Attribute Blur",
+            "code": "\"\"\" Blur attributes. \"\"\";\n\n// Get attribute to be blurred.\nstring attr = chs(\"attribute\");\n\n// Get attribute size.\nint size = attribsize(0, \"point\", attr);\n\n// Get maximum points and clamp value by 1.\nint max_pts = clamp(chi(\"max_points\"), 1, int(1e09));\n\n// Create point cloud.\nint handle = pcopen(0, \"P\", v@P, 1e09, max_pts);\n\n// Check if value is float and export it.\nif(size==1){\n    float attr_val = pcfilter(handle, attr);\n    setpointattrib(0, attr, @ptnum, attr_val);\n}\n// Check if value is vector and export it.\nif(size==3){\n    vector attr_val = pcfilter(handle, attr);\n    setpointattrib(0, attr, @ptnum, attr_val);\n}"
+        },
+        "attr_from_map": {
+            "reference_code": "11700711",
+            "section": "Attribute From Map",
+            "code": "\"\"\" Color and Alpha from texture file. \"\"\";\n\n// Get the base color texture and the uv attribute.\nstring base_color = chs(\"base_color\");\nstring uv_attr = chs(\"point_UV\");\nvector uv = point(0, uv_attr, @ptnum);\n\n// Compute color map using uvs and texture file.\nvector4 color = colormap(base_color, uv);\n\n// Export color and Alpha.\nv@Cd = vector(color);\nf@Alpha = color.a;"
+        },
+        "curvature": {
+            "reference_code": "17683493",
+            "section": "Basic Curvature Attribute",
+            "code": "\"\"\" Compute curavture. \"\"\";\n\n// Get neighbour points.\nint neig[] = neighbours(0, @ptnum);\n\n// Initialize curvature and iterate for each neighbour points.\nfloat curvature=0;\nforeach(int pt; neig){\n    \n    // Get normal from neighbour.\n    vector norm = point(0, \"N\", pt);\n    \n    // Compute dot product between neighbour normal anad current normal.\n    float dot = dot(norm, v@N);\n    \n    // Complement dot product.\n    float factor = 1-dot;\n    \n    // Add value to curvature.\n    curvature+=factor;\n}\n\n// Export curvature value.\nf@curvature = curvature / len(neig);"
+        },
+        "refract_model": {
+            "reference_code": "85292031",
+            "section": "Basic Refract Model SOPs",
+            "code": "\"\"\" Create basic refaction model. \"\"\";\n\n// Get camera position.\nstring cam = chs(\"camera\");\nmatrix cam_xform = optransform(cam);\nvector cam_pos = cracktransform(0,0,0,{0,0,0},cam_xform);\n\n// Get air medium.\nfloat air_index = chf(\"air_index\");\n\n// Get camera direction to point.\nvector dir = normalize(v@P-cam_pos);\n\n// Compute refract model using the refract function.\nvector refract = refract(dir, normalize(v@N), air_index);\n\n// Initialize position and uvw for intersect function.\nvector pos; vector uvw;\n\n// Intersect using direction from camera.\nint prim = intersect(1, v@P, refract*1e09, pos, uvw);\n\n// Get color vector.\nvector color = primuv(1, \"Cd\", prim, uvw);\n\n// Export color attribute.\nv@Cd = color;"
+        },
+        "blur_position": {
+            "reference_code": "26692791",
+            "section": "Blur Point Positions",
+            "code": "\"\"\" Blur based on nearpoints. \"\"\";\n\n// Get maximum distance and maximum points.\nfloat maxdist = chf(\"maxdist\");\nint maxpts = chi(\"maxpts\");\n\n// Get near points based on distance and max points.\nint nearpts[] = nearpoints(0, v@P, maxdist, maxpts);\n\n// Initialize pos variable with current position value.\nvector pos = v@P;\n\n// Iterate for each of the near points.\nforeach(int i; nearpts){\n    \n    // Add value to the pos variable.\n    pos += point(0, \"P\", i); \n}\n\n// Divide position by the amount of near points that you iterated.\n// We add an additional value because of the initial value of the\n// current position.\npos/=len(nearpts)+1;\n\n// Set attribute value.\nv@P = pos;"
+        },
+        "checkerboard": {
+            "reference_code": "91425231",
+            "section": "Checkboard Color",
+            "code": "\"\"\" Create checker using ternary conditions. \"\"\";\n\n// Set the frequency for the scene.\nfloat freq = chf(\"frequency\");\n\n// Compute vertical sections.\nv@Cd = (sin(v@P.x*freq)<0)?0:1;\n\n// Add horizontal sections.\nv@Cd += (sin(v@P.z*freq)<0)?0:1;\n\n// Check if there's coincidence and multiply by 0.\nv@Cd *= (v@Cd.r==2)?0:1;"
+        },
+        "nearpoint": {
+            "reference_code": "45043176",
+            "section": "Cluster By Point Proximity",
+            "code": "\"\"\" Set cluster by proximity. \"\"\";\n\n// Set cluster value.\ni@cluster = nearpoint(1, v@P);"
+        },
+        "fresnel": {
+            "reference_code": "4646091",
+            "section": "Color Fresnel",
+            "code": "\"\"\" Compute fresnel from camera. \"\"\";\n\n// Get camera to extract transformations.\nstring cam = chs(\"camera\");\n\n// Extract transformation from operator.\nmatrix cam_xform = optransform(cam);\n\n// Get positon from the matrix.\nvector pos = cracktransform(0,0,0,0,cam_xform);\n\n// Get direction from current point to camera.\nvector dir = normalize(pos-v@P);\n\n// Compute dot product.\nfloat dot = dot(dir, v@N);\n\n// Fit dot values.\nvector color = fit(dot, chf(\"min_color\"), chf(\"max_color\"), 1, 0); \n\n// Export color attribute.\nv@Cd = color;"
+        },
+        "colorize": {
+            "reference_code": "66781383",
+            "section": "Color Normalized Age",
+            "code": "\"\"\" Normalize particle age. \"\"\";\n\n// Compute normalized age.\nfloat nage = f@age/f@life;\n\n// Remap color using normalized age.\nvector color = chramp(\"color\", nage);\n\n// Export color attribute.\nv@Cd = color;"
+        },
+        "curveu": {
+            "reference_code": "49138898",
+            "section": "Compute Curveu From Line",
+            "code": "\"\"\" Compute curveu. \"\"\";\n\n// Compute curveu based on amount of points and current ptnum.\nfloat curveu = float(@ptnum)/float(@numpt-1); \n\n// Set value.\nf@curveu = curveu;"
+        },
+        "cone_angle": {
+            "reference_code": "55464733",
+            "section": "Cone Angle Direction",
+            "code": "\"\"\" Cone angle direction. \"\"\"; \n\n// Get reference position, direction, angle and distance values.\nvector ref_pos = chv(\"reference_position\");\nvector ref_dir = normalize(chv(\"reference_direction\"));\nfloat max_angle = chf(\"max_angle\")/2;\nfloat max_dist = chf(\"max_distance\");\n\n// Get direction from reference position. \nvector pt_dir = normalize(v@P-ref_pos);\n\n// Create cone direction and round values.\nfloat cone = ceil(fit(dot(pt_dir, ref_dir), 1, cos(radians(max_angle)), 1, 0));\n\n// Compute distance.\nfloat dist = distance(v@P, ref_pos);\ndist = (dist<=max_dist)? 1:0;\n\n// Export color with cone values.\nv@Cd = cone*dist;"
+        },
+        "find_equiv_ptnum": {
+            "reference_code": "39128540",
+            "section": "Find Equivalent Ptnum",
+            "code": "\"\"\" Find equivalent value and set the color using integer values. \"\"\";\n\n// Find equivalent point using int attribute.\nint equiv_pt = findattribval(1, \"point\", \"id\", i@id);\n\n// Get attribute using equivalent point.\nvector color = point(1, \"Cd\", equiv_pt);\n\n// Set attribute.\nv@Cd = color;"
+        },
+        "attr_name_array": {
+            "reference_code": "57971184",
+            "section": "Group To Attribute",
+            "code": "\"\"\" Convert attribute into groups. \"\"\";\n\n// Get all point groups.\nstring grps[] = detailintrinsic(0, \"pointgroups\");\n\n// Initialize point group array.\nstring pt_grps[];\n\n// Iterate for each available point group.\nforeach(string grp; grps){\n    \n    // Check if point in point group and append if so.\n    if (inpointgroup(0, grp, @ptnum)) append(pt_grps, grp);\n}\n\n// Export array of point groups for current point.\ns[]@grp_attr = pt_grps;"
+        },
+        "attr_creation": {
+            "reference_code": "57971184",
+            "section": "Group To Attribute",
+            "code": "\"\"\" Convert attribute into groups. \"\"\";\n\n// Get all point groups.\nstring grps[] = detailintrinsic(0, \"pointgroups\");\n\n// Iterate for each available point group.\nforeach(string grp; grps){\n    \n    // Check if point in point group and create attribute if so.\n    if(inpointgroup(0, grp, @ptnum)) setpointattrib(0, grp, @ptnum, 1);\n}"
+        },
+        "infrared": {
+            "reference_code": "56068393",
+            "section": "Infrared From Float Attribute",
+            "code": "\"\"\" Create color attribute to visualize values. \"\"\";\n\n// Get attribute name, type and size.\nstring attr = chs(\"attribute\");\nint type = attribtype(0, \"point\", attr);\nint size = attribsize(0, \"point\", attr);\n\n// The attribute must be float.\nif(type==1 && size==1){\n\n    // Fit attribute values based on min and max values.\n    float att_val = fit(point(0, attr, @ptnum), chf(\"minimum_value\"), chf(\"maximum_value\"), 0, 1);\n    \n    // Get infrared values.\n    vector values[] = array({0.2,0,1}, {0,0.85,1}, {0,1,0.1}, {0.95,1,0}, {1,0,0});\n    \n    // Compute spline with values and sample position.\n    vector color = spline(\"linear\", att_val, values);\n    \n    // Export color attribute.\n    v@Cd = color;\n}"
+        },
+        "noise_edge_mask": {
+            "reference_code": "72728404",
+            "section": "Noise Edge Mask",
+            "code": "\"\"\" Noise mask edge based on x axis. \"\"\";\n\n// Displace position and store it in a variable.\nvector pos = v@P+noise(v@P*chf(\"frequency\"))*chf(\"amplitude\");\n\n// Normalize the xaxis position.\nfloat xaxis = fit(pos.x, getbbox_min(0).x, getbbox_max(0).x, 0, 1);\n\n// Remap normalize x axis position values and contrast them.\nxaxis = chramp(\"axis\", xaxis);\n\n// Set color.\nv@Cd = xaxis;"
+        },
+        "norm_pt_pos": {
+            "reference_code": "6378648",
+            "section": "Normalize Point Positions",
+            "code": "\"\"\" Normalize position values. \"\"\";\n\n// Get bouding box max and min sizes.\nvector max_bbox = getbbox_max(0);\nvector min_bbox = getbbox_min(0);\n\n// Normalize position values.\nvector norm_pos = fit(v@P, min_bbox, max_bbox, 0, 1);\n\n// Export normalized positions in the color attribute.\nv@Cd = norm_pos;"
+        },
+        "pt_density": {
+            "reference_code": "35108816",
+            "section": "Normalized Point Density",
+            "code": "\"\"\" Compute normalized point density. \"\"\";\n\n// Get maximum points and radius to compute density.\nint maxpts = chi('max_points');\nfloat rad = chf('radius');\n\n// Get nearpoints from first input.\nint pts[] = nearpoints(0, v@P, rad, maxpts);\n\n// Compute normalized density value based on maxpoints.\nfloat density = (len(pts)-1)/float(maxpts-1);\n\n// Export density attribute.\nf@density = density;"
+        },
+        "attribute_transfer": {
+            "reference_code": "53451011",
+            "section": "Point Attribute Transfer",
+            "code": "\"\"\" Point attribute transfer with falloff. \"\"\";\n\n// Initialize transfer values.\nint enable_falloff = chi(\"enable_falloff\"); \nfloat max_dist = chf(\"max_distance\");\n\n// Get list of attributes and split based on spaces.\nstring list_attr = chs(\"point_attributes\");\nstring attrs[] = split(list_attr, \" \");\n\n// Get closest point from the current point.\nint nearpt = nearpoint(1, v@P);\n\n// Get closest point position and compute distance.\nvector nearpt_pos = point(1, \"P\", nearpt);\nfloat dist = distance(v@P, nearpt_pos);\n\n// If the point is not further than the maximum distance.\nif(dist<max_dist){\n\n    // Remap distance and store it as bias.\n    float bias = fit(dist, 0, max_dist, 1, 0);\n    bias = chramp(\"falloff_ramp\", bias);\n    \n    // Loop for each of the input values.\n    foreach(string att; attrs){\n    \n        // Get the type of the attribute and its size.\n        int attrtype = attribtype(1, \"point\", att);\n        int attrsize = attribsize(1, \"point\", att);\n        \n        // Check if the attribute is int and filter.\n        if(attrtype==0) setpointattrib(0, att, @ptnum, int(point(1, att, nearpt)));\n\n        // Check if the attribute is string and filter.\n        if(attrtype==2) setpointattrib(0, att, @ptnum, string(point(1, att, nearpt)));\n        \n        // Check if the attribute is float.\n        if(attrtype==1 && attrsize==1){\n            \n            // Filter float information.\n            float filter = point(1, att, nearpt);\n            \n            // Check if user wants falloff and set the value.\n            filter = (enable_falloff)? lerp(point(0, att, nearpt), filter, bias):filter;\n            setpointattrib(0, att, @ptnum, filter);\n        }\n        \n        // Check if the attribute is vector2.\n        if(attrtype==1 && attrsize==2){\n        \n            // Filter vector2 information.\n            vector2 filter = point(1, att, nearpt);\n            \n            // Check if user wants falloff and set the value.\n            filter = (enable_falloff)? lerp(point(0, att, nearpt), filter, bias):filter;\n            setpointattrib(0, att, @ptnum, filter);\n        }\n        \n        // Check if the attribute is vector3.\n        if(attrtype==1 && attrsize==3){\n        \n            // Filter vector3 information.\n            vector filter = point(1, att, nearpt);\n            \n            // Check if user wants falloff and set the value.\n            filter = (enable_falloff)? lerp(point(0, att, nearpt), filter, bias):filter;\n            setpointattrib(0, att, @ptnum, filter);\n            \n        }\n    }\n}"
+        },
+        "remove_attr": {
+            "reference_code": "87389390",
+            "section": "Remove Attributes",
+            "code": "\"\"\" Remove point attributes. \"\"\";\n\n// Get attributes to remove and separate them.\nstring attrs = chs(\"attributes\");\nstring attr_list[] = split(attrs, \" \");\n\n// Iterate for each attribute in the list.\nforeach(string attr; attr_list){\n    \n    // If the attribute exists, remove it.\n    if(haspointattrib(0, attr)){\n        removepointattrib(0, attr);\n    }\n    \n    // If the attribute doesn't exist, raise a warning.\n    else{\n        warning(\"%s attribute doesn't exist or it is not valid.\", attr);\n    }\n}"
+        },
+        "var_attr": {
+            "reference_code": "43837465",
+            "section": "Variant Attribute",
+            "code": "\"\"\" Create random integer values. \"\"\";\n\n// Get amount of integer values.\nint count = chi(\"count\");\n\n// Fit random value using count.\nint var = int(fit01(rand(@ptnum), 0, count));\n\n// Set variant attribute.\ni@variant = var;"
+        },
+        "cst_to_camera": {
+            "reference_code": "67107636",
+            "section": "Camera Constraint",
+            "code": "\"\"\" Constraint object to camera. \"\"\";\n\n// Get old and new computed matrix.\nmatrix xform_old = detail(2, \"xform\");\nmatrix xform_new = detail(1, \"xform\");\n\n// Get offset matrix.\nmatrix offset_xform = invert(xform_old)*xform_new;\n\n// Transform position and normals.\nv@P*=offset_xform;\nv@N*=matrix3(offset_xform);"
+        },
+        "flat_camera": {
+            "reference_code": "31941042",
+            "section": "Camera Flatten Object",
+            "code": "\"\"\" Flatten objects based on camera perspective. \"\"\";\n\n// Get depth and camera.\nfloat depth = chf(\"depth\");\nstring cam = chs(\"camera\");\n\n// Transform to NDC and flatten points.\nvector ndc_flatten = toNDC(cam, v@P);\nndc_flatten.z=-depth;\n\n// Transform back to world position.\nvector flatten = fromNDC(cam, ndc_flatten);\n\n// Export position.\nv@P = flatten;"
+        },
+        "frustum_camera": {
+            "reference_code": "1082246",
+            "section": "Camera Frustum",
+            "code": "\"\"\" Create camera frustum and make available the expansions. \"\"\";\n\n// Get camera path to create the frustum from.\nstring cam = chs(\"camera\");\n\n// Initialize expansion values (x,y).\nfloat expand_top = chf(\"expand_top\");\nfloat expand_bottom = chf(\"expand_bottom\");\nfloat expand_right = chf(\"expand_right\");\nfloat expand_left = chf(\"expand_left\");\n\n// Initialize clipping values (z).\nfloat near_clip = chf(\"near_clip\");\nfloat far_clip = chf(\"far_clip\");\n\n// Offset position to \"convert\" box position into normalized\n// coordinates.\nvector offset_pos = set(0.5, 0.5, -0.5);\nvector pos = v@P+offset_pos;\n\n// Apply expansions based on normalized positions.\nif(pos.y==1) pos.y+=expand_top;\nif(pos.y==0) pos.y-=expand_bottom;\nif(pos.x==1) pos.x+=expand_right;\nif(pos.x==0) pos.x-=expand_left;\n\n// Apply clipping based on normalized positions.\nif(pos.z==-1) pos.z-=far_clip;\nif(pos.z==0) pos.z-=near_clip;\n\n// Set position converting from NDC coordinates to world space.\nv@P = fromNDC(cam, pos);\n\n/* In this case we inverted the process. We created an \"NDC\" and\nwe are transforming back to world space. */"
+        },
+        "view_cull": {
+            "reference_code": "77118676",
+            "section": "Camera View Direction Cull",
+            "code": "\"\"\" Cull camera direction view. \"\"\";\n\n// Create function that returns prim intersection based on camera.\nint primIntersect(vector pos, cam){\n    vector dir = normalize(cam-pos);    \n    vector pst, uvw;\n    \n    int p = intersect(0, pos, dir*1e06, pst, uvw);\n    return p;\n}\n\n// Get camera and its position.\nstring cam_name = chs(\"camera\");\nmatrix cam_xform = optransform(cam_name);\nvector cam = cracktransform(0,0,0,{0,0,0},cam_xform);\n\n// Create direction based on current position and camera.\nvector cam_dir = normalize(cam-v@P);\n\n// Create a peaked position.\nvector peak_pos = v@P+cam_dir*1e-3;\n\n// Check if current point intersects.\nint p = primIntersect(peak_pos, cam);\n\n// Get current point neighbours.\nint neigh[] = neighbours(0, @ptnum);\n\n// Initialize checker.\nint incheck;\n\n// If the primitive intersects.\nif(p!=-1){\n\n    // Iterate for each neighbour.\n    foreach(int i; neigh){\n        \n        // Get neighbour position.\n        vector neipos = point(0, 'P', i);\n        \n        // Get current point camera direction.\n        vector nei_cam_dir = normalize(cam-neipos);\n        \n        // Peak neighbour position using camera direction.\n        vector nei_peak_pos = neipos+nei_cam_dir*1e-3;\n        \n        // Check if current neighbour point intersects.\n        int neip = primIntersect(nei_peak_pos, cam);\n\n        // Check if neighbour intersects. If so, break and update incheck value.\n        if(neip==-1){ \n            incheck=-1; break;         \n        }\n    }\n}\n\n// Remove point if looking to camera.\nif(p!=-1 && incheck!=-1){\n    removepoint(0, @ptnum);\n    \n}"
+        },
+        "remap_values": {
+            "reference_code": "25761785",
+            "section": "From 01 to -11",
+            "code": "\"\"\" Remap random 01 values to -11 values. \"\"\";\n\n// Create random value between 0 and 1.\nfloat rand = rand(@ptnum);\n\n// Fit 0 to 1 values to -1 to 1 values.\nfloat ramp = fit01(rand, -1, 1);\n\n// Export -1 to 1 values.\nf@rand_vale = ramp;"
+        },
+        "hanging_pts": {
+            "reference_code": "26615300",
+            "section": "Create Hanging Catenary Wire",
+            "code": "\"\"\" Create hanging catenary wires. \"\"\"; \n\n// Get the parabola amplitude and resolution from lines.\nfloat a = 1-ch('parabola_amplitude');                        \nfloat res = chi('res')+1;                                  \n\n// Initialize point array.\nint pts[];\n\n// Iterate for each input point. \nfor(int i=1;i<npoints(0);i++){\n    \n    // Append current input point to the point array.\n    append(pts, i-1);\n    \n    // Get current point position and next point position. \n    vector curr_pos = point(0,'P',i-1);\n    vector next_pos = point(0,'P',i);\n    \n    // Iterate to create points for the line based on resolution factor.\n    for(int b=1;b<res;b++){\n        \n        // Compute normalized line point value.\n        float curveu = b/res;\n        \n        // Compute positions for the points.\n        vector pos = curr_pos + ((next_pos-curr_pos)/res)*b;\n        \n        // Compute the amount of anchor displacement.\n        float disp_corner = a * cosh((curveu-0.5)/a);\n        \n        // Compute the amount of center displacement. \n        float center_base = a * cosh((-0.5)/a);\n        \n        // Apply offsets/\n        pos.y += disp_corner-center_base;\n        \n        // Create point.\n        int pt = addpoint(0, pos);\n        \n        // Append point number to the point array.\n        append(pts, pt);\n    \n    }                                   \n}\n\n// Append last point to the list and create the polyline.\nappend(pts, npoints(0)-1);\naddprim(0,\"polyline\",pts);"
+        },
+        "point_trail": {
+            "reference_code": "11042687",
+            "section": "Create Velocity Trail",
+            "code": "\"\"\" Compute basic particle trail using velocity. \"\"\"; \n\n// Compute velocity using fps.\nvector comp_vel = v@v*f@TimeInc;\n\n// Compute new position.\nvector new_pos = v@P-comp_vel;\n\n// Create point based on velocity.\nint pt = addpoint(0, new_pos);\n\n// Create polyline.\naddprim(0, \"polyline\", @ptnum, pt);"
+        },
+        "check_inside_pts_geo": {
+            "reference_code": "69877006",
+            "section": "Check Point Inside Geometry",
+            "code": "\"\"\" Check if point is inside of geometry without volumes. \"\"\";\n\n// Initialize primitive and parametric coords.\nvector uvw; int prim;\n\n// Capture primitive and parametric coords.\nxyzdist(1, v@P, prim, uvw);\n\n// Get position and normal ray intersection information.\nvector pos = primuv(1, \"P\", prim, uvw);\nvector norm = primuv(1, \"N\", prim, uvw);\n\n// Compute direction vector between two points.\nvector dir = normalize(v@P-pos);\n\n// Check dot product between direction and normal.\nfloat dot = dot(dir, norm);\n\n// Create a group to contain the inside points.\nif(dot<0) setpointgroup(0, \"inside\", @ptnum, 1);"
+        },
+        "check_inside_pts_vol": {
+            "reference_code": "69877006",
+            "section": "Check Point Inside Geometry",
+            "code": "\"\"\" Check if point is inside of geometry with volumes. \"\"\";\n\n// Sample signed distance field volume.\nfloat dist = volumesample(1, 0, v@P);\n\n// Create a group to contain the inside points.\nif(dist<0) setpointgroup(0, \"inside\", @ptnum, 1);"
+        },
+        "fuse": {
+            "reference_code": "28848869",
+            "section": "Fuse Points",
+            "code": "\"\"\" Fuse coincident points. \"\"\";\n\n// Get points in the same position.\nint nearpts[] = nearpoints(0, v@P, 1e-5, int(1e09));\n\n// Store last index.\nint keep_pt = nearpts[-1];\n\n// Remove last index\nremoveindex(nearpts, -1);\n\n// Check if current point is the keep point. \nif(keep_pt==@ptnum){\n    \n    // Iterate for each coincident points.\n    foreach(int pt; nearpts){\n        \n        // Get vertices for current point.\n        int vtxs[] = pointvertices(0, pt);\n        \n        // If the list contain vertices, run loop.\n        if(len(vtxs)!=0){\n            \n            // Iterate for each vertex.\n            foreach(int vtx; vtxs){\n                \n                // Set vertex for points.\n                setvertexpoint(0, -1, vtx, @ptnum);\n            }\n        }\n        \n        // Remove point.\n        removepoint(0, pt);\n    }\n}"
+        },
+        "remove_speed": {
+            "reference_code": "26542349",
+            "section": "Remove By Speed",
+            "code": "\"\"\" Remove based on speed. \"\"\";\n\n// Get speed threshold.\nfloat speed_thr = chf(\"speed_threshold\");\n\n// Compute speed.\nfloat speed = length(v@v);\n\n// Remove based on speed.\nif(speed<speed_thr)removepoint(0, @ptnum);"
+        },
+        "remove_points_by_threshold": {
+            "reference_code": "30331484",
+            "section": "Remove By Threshold",
+            "code": "\"\"\" Remove by threshold. \"\"\";\n\n// Create a random value betweem 0 and 1 for each point.\nfloat rand_value = rand(@ptnum);\n\n// Check if the value is smaller than the threshold.\nif(rand_value<chf(\"threshold\")){\n\n    // Remove point.\n    removepoint(0, @ptnum);\n}"
+        },
+        "remove_unused_pts": {
+            "reference_code": "11943207",
+            "section": "Remove Unused Points",
+            "code": "\"\"\" Remove unused points. \"\"\";\n\n// Get neighbour count.\nint count = neighbourcount(0, @ptnum);\n\n// Remove point if count is 0.\nif(count==0) removepoint(0, @ptnum);"
+        },
+        "expand_point_grp": {
+            "reference_code": "10643779",
+            "section": "Group Expand",
+            "code": "\"\"\" Expand point group. \"\"\";\n\n// Get expand steps. \nint steps = chi(\"steps\");\n\n// Get group name and get points in the group.\nstring pt_grp = chs(\"point_group\");\nint pts[] = expandpointgroup(0, pt_grp);\n\n// Initialize previous primitive group.\nint prev[] = array(@ptnum);\n\n// Check if the current point is in the group.\nif(find(pts, @ptnum)>=0){\n\n    // Iterate for each of the steps.\n    for(int i=0; i<steps; i++){\n        \n        // Initialize neighbour points array.\n        int step_neis[];\n        \n        // Interate for each previous point.\n        foreach(int a; prev){\n            \n            // Get neighbour points.\n            int neis[] = neighbours(0, a);\n            \n            // Iterate for each of the neighbours.\n            foreach(int nei; neis){\n                \n                // Check if point is already in the group.\n                if(find(pts, nei)<0){\n                    \n                    // Append point to setp_neis and set point group.\n                    append(step_neis, nei);\n                    setpointgroup(0, pt_grp, nei, 1);\n                }\n            } \n        }\n        \n         // Update last step points.\n        prev = step_neis;\n    }\n}"
+        },
+        "name_to_grp": {
+            "reference_code": "54775006",
+            "section": "Name Pattern To Group",
+            "code": "\"\"\" Convert name attribute pattern into group. \"\"\";\n\n// Get group name and pattern.\nstring grp_name = chs(\"group_name\");\nstring pattern = chs(\"pattern\");\n\n// Check if name matches the pattern and set the group\nif(match(pattern, s@name)) setpointgroup(0, grp_name, @ptnum, 1);"
+        },
+        "remove_grps": {
+            "reference_code": "73004854",
+            "section": "Remove Groups",
+            "code": "\"\"\" Remove point attributes. \"\"\";\n\n// Get groups to remove and separate them.\nstring grps = chs(\"groups\");\nstring grp_list[] = split(grps, \" \");\n\n// Get all groups.\nstring grp_check[] = detailintrinsic(0, \"primgroups\");\n\n// Iterate for each group in the list.\nforeach(string grp; grp_list){\n    \n    // If the group exists, remove it.\n    if(find(grp_check, grp)>=0){\n        removepointgroup(0, grp);\n    }\n    \n    // If the group doesn't exist, raise a warning.\n    else{\n        warning(\"%s group doesn't exist or it is not valid.\", grp);\n    }\n}"
+        },
+        "pump": {
+            "reference_code": "88325985",
+            "section": "Pump Motion Attribute",
+            "code": "\"\"\" Create pump values. \"\"\";\n\n// Get ratio for the pump.\nfloat ratio = chf(\"ratio\");\n\n// Compute pump using ratio and normalize it.\nfloat pump = (f@Frame%ratio)/ratio;\n\n// Compute pump spline.\npump = spline(array(\"linear\"), pump, array(0, 1, 0, 1), array(0, 0.75, 0.9, 1));\n\n// Export color pump attribute.\nv@Cd = pump;"
+        },
+        "capture": {
+            "reference_code": "209363",
+            "section": "Advanced Point Deform",
+            "code": "\"\"\"Capture the close points and weights\"\"\";\n\n//Capture close points between lowres and highres rest pose.\nfloat maxdist = chf('maxdist');\nint maxpts = chi('maxpts');\nint npts[] = nearpoints(1, v@P, maxdist, maxpts);\n\n// Store captured points.\ni[]@npts = npts;\n\n//Iterate for each captured point and compute the distance to generate the weights.\nfloat weights[];\n\nforeach(int val; npts){\n    vector npos = point(1, 'P', val);\n    float ndist = distance(v@P, npos);\n    //Invert values to have higher values being closer to its reference point\n    ndist = fit(ndist, 0, maxdist, 1, 0);\n    push(weights, ndist);\n}\n\n// Store captured weights.\nf[]@weights = weights;"
+        },
+        "get_offset_matrix": {
+            "reference_code": "209363",
+            "section": "Advanced Point Deform",
+            "code": "\"\"\" Retrieve offset comparing original rest and anim geometry. \"\"\";\n\n//Get the basic translation offset\nvector npos = point(1, 'P', @ptnum);\nv@offset = npos-v@P;\n\n//Get neighbours to create the animated axis for the matrix\nint npts[] = neighbours(0, @ptnum);\nvector ndir = point(1, 'P', npts[0]);\nvector tan1 = npos - ndir;\nndir = point(1, 'P', npts[1]);\nvector tan2 = npos - ndir;\nvector up = cross(tan1, tan2);\n\n//Create the animated matrix for each of the points\nmatrix3 xformnew = maketransform(normalize(tan1), normalize(up));\n\n//Create the reference axis for the matrix\nndir = point(0, 'P', npts[0]);\ntan1 = v@P - ndir;\nndir = point(0, 'P', npts[1]);\ntan2 = v@P - ndir;\nup = cross(tan1, tan2);\n\nmatrix3 xformold = maketransform(normalize(tan1), normalize(up));\n\n//Create the offset using addition method = invert(reference matrix)* new matrix \nmatrix3 totalxform = invert(xformold)*xformnew;\n\n3@xform = totalxform;"
+        },
+        "set_deform": {
+            "reference_code": "209363",
+            "section": "Advanced Point Deform",
+            "code": "\"\"\"Set deformation for the new geometry\"\"\";\n\n//Initialize values and store attributes inside statements\nfloat weights[] = f[]@weights;\nint npts[] = i[]@npts;\nfloat sumweights = 0;\nvector sumoffsets = {0,0,0};\nint val = 0;\n\n//Offset based on its weigth and capture point\nforeach(int npt; npts){\n    //Retrieve xform, position and offset from anim\n    vector opos = point(1, 'P', npt);\n    matrix3 xform = point(1, 'xform', npt);\n    vector offset = point(1, 'offset', npt);\n    \n    //Transform to the center, apply xform transformations and bring back transforms\n    vector pos = v@P;\n    pos -= opos;\n    pos *= xform;\n    pos += opos;\n    pos -= v@P;\n    \n    //Add basic displacement to the point\n    offset += pos;\n    \n    //Multiply offset by weights to transform based on relative position, add all influenced offsets and add all the weights\n    offset *= weights[val];\n    sumweights += weights[val];\n    sumoffsets += offset;\n    val++;\n}\n\n//Get final offset based on the influence of the weights\nvector finaloffset = sumoffsets / sumweights;\nv@P += finaloffset;"
+        },
+        "point_deform": {
+            "reference_code": "39569619",
+            "section": "Basic Point Deform",
+            "code": "\"\"\" Deform point position based on rest and animated geometry. \"\"\"; \n\n// Initialize primitive and uv intrinsic coordinates.\nint prim; vector uvw;\nxyzdist(1, v@P, prim, uvw);\n\n// Retrieve the position value from the animated geometry.\nvector pos = primuv(2, \"P\", prim, uvw);\n\n// Set position.\nv@P = pos;"
+        },
+        "transform": {
+            "reference_code": "32956689",
+            "section": "Basic Transform With Matrix",
+            "code": "\"\"\" Transform object based on input values.\"\"\";\n\n// Initialize world space matrix.\nmatrix orig_matrix = ident();\n\n// Create scale vector and transform matrix.\nvector scale = chv(\"scale\");\nscale(orig_matrix, scale);\n\n// Create rotation vector.\nvector rot = chv(\"rotation\");\n\n// Rotate function uses radians, so we convert degrees to radians.\n// Value 1 stands for X. Value 2 stands for Y. Value 4 stands for Z.\nrotate(orig_matrix, radians(rot.x), 1);\nrotate(orig_matrix, radians(rot.y), 2);\nrotate(orig_matrix, radians(rot.z), 4);\n\n// Create translate vector and transform matrix.\nvector trans = chv(\"translation\");\ntranslate(orig_matrix, trans);\n\n// Set transformations.\nv@P*=orig_matrix;"
+        },
+        "blend_shapes": {
+            "reference_code": "61849155",
+            "section": "Blend Shapes",
+            "code": "\"\"\" Blend between shapes. \"\"\";\n\n// Get bias for the blend shape.\nfloat bias = chf(\"bias\");\n\n// Get position equivalent point number position attribute.\nvector pos = point(1, \"P\", @ptnum);\n\n// Interpolate between the two positions using bias.\nvector final_pos = lerp(v@P, pos, bias);\n\n// Set final position.\nv@P = final_pos;"
+        },
+        "compute_offset_matrix": {
+            "reference_code": "29263487",
+            "section": "Dihedral Offset",
+            "code": "\"\"\" Compute rotation offset matrix. \"\"\";\n\n// Get the up vector from input 1.\nvector N = v@opinput1_N;\n\n// Compute offset rotation with dihedral.\nmatrix3 rot_offset = dihedral(v@N, N);\n\n// Store offset matrix.\n3@rot = rot_offset;"
+        },
+        "rot_edge": {
+            "reference_code": "28567025",
+            "section": "Edge Rotation Based",
+            "code": "\"\"\" Rotate using the edge. \"\"\";\n\n// Get degrees of rotation for the primitive.\nfloat degrees = chf(\"degrees\");\n\n// Get prim points get number of maximum possible edges.\nint pts[] = primpoints(0, @primnum);\nint next_edge = clamp(chi(\"next_edge\"), 0, len(pts)-1);\n\n// Initialize half edge.\nint hedge = primhedge(0, @primnum);\n\n// Update half edge if user inputs next edge. \nfor(int p=0; p<next_edge; p++){\n    hedge = hedge_next(0, hedge);\n}\n\n// Iterate for each prim point. \nforeach(int pt; pts){\n    \n    // Get original position for current point.\n    vector orig_pos = point(0, \"P\", pt);\n    \n    // Get source and destiny half edge points.\n    int src_num = hedge_srcpoint(0, hedge);\n    int dst_num = hedge_dstpoint(0, hedge);\n    \n    // Get source and destiny half edge point positions.\n    vector src_pos = point(0, \"P\", src_num);\n    vector dst_pos = point(0, \"P\", dst_num);\n    \n    // Compute rotation direction. \n    vector dir = normalize(dst_pos-src_pos);\n    \n    // Compute middle edge position.\n    vector mid_pos = (src_pos+dst_pos)/2;\n    \n    // Initialize matrix.\n    matrix xform = ident();\n    \n    // Transform points to the center of the world.\n    translate(xform, -mid_pos);\n    \n    // Rotate points based on angle.\n    rotate(xform, radians(degrees), dir);\n    \n    // Transform points back to the original position.\n    translate(xform, mid_pos);\n    \n    // Add new transformation to original position.\n    vector pos = orig_pos*xform;\n    \n    // Export point position.\n    setpointattrib(0, \"P\", pt, pos);\n}"
+        },
+        "set_transformations": {
+            "reference_code": "30376309",
+            "section": "Extract Transform",
+            "code": "\"\"\" Reset transformations. \"\"\";\n\n// Retrieve xform attribute.\nmatrix xform = point(1, \"xform\", 0);\n\n// Apply transformations to the position.\nv@P*=xform;\n\n// Apply transformations to the normal.\nv@N*=matrix3(xform);"
+        },
+        "inset_prims": {
+            "reference_code": "479350",
+            "section": "Inset Primitive",
+            "code": "\"\"\" Inset primitives. \"\"\";\n\n// Get inset value.\nfloat inset = chf(\"inset\");\n\n// Get primitive connected to current point.\nint pt_prim = pointprims(0, @ptnum)[0];\n\n// Get connected primitive position. \nvector prim_pos = prim(0, \"P\", pt_prim);\n\n// Linear interpolation based on inset.\nvector pos = lerp(v@P, prim_pos, inset);\n\n// Export position attribute.\nv@P = pos;"
+        },
+        "jitter_pts": {
+            "reference_code": "55905505",
+            "section": "Jitter Points",
+            "code": "\"\"\" Jitter point position. \"\"\";\n\n// Create function to rand values between -1 and 1.\nfunction float randVal(int id; float seed){\n    \n    // Randomize values between -1 and 1 and return the value.\n    float rand = fit01(rand(id+seed), -1, 1);\n    return rand;\n}\n\n// Initialize jitter parameters.\nint is_id = chi(\"id\");\nstring id_attr = chs(\"id_attribute\");\nfloat scale = chf(\"scale\");\nfloat seed = chf(\"seed\");\nvector axis_scale = chv(\"axis_scale\");\n\n// Check if user wants to input id attribute.\nint id = (is_id==1)?point(0, id_attr, @ptnum):@ptnum;\n\n// Create directional vector.\nvector dir = set(randVal(id, seed),\n                 randVal(id, seed+1),\n                 randVal(id, seed+2))*axis_scale;\n\n// Set new position.\nv@P+=(dir*scale);"
+        },
+        "peak": {
+            "reference_code": "92501258",
+            "section": "Peak Geometry",
+            "code": "\"\"\" Peak object using normals. \"\"\";\n\n// Get peak value.\nfloat peak = chf(\"peak\");\n\n// Mult normals and peak value.\nvector push = v@N*peak;\n\n// Add peak.\nv@P+=push;"
+        },
+        "push_pt": {
+            "reference_code": "56272568",
+            "section": "Push Point Over Ground",
+            "code": "\"\"\" Push point over the surface. \"\"\"; \n\n// Get maximum and minimum position values.\nvector max_bbox = getbbox_max(0);\nvector min_bbox = getbbox_min(0);\n\nif(sign(min_bbox.y)==-1){\n    // Compute normalize height.\n    float norm_height = fit(v@P.y, min_bbox.y, max_bbox.y, 1, 0);\n    \n    // Compute offset based on normalized height and add it to current position.\n    float pos = v@P.y+abs(min_bbox.y)*norm_height;\n    \n    // Remap normalized height.\n    norm_height = chramp(\"push_remap\", norm_height);\n    \n    // Interpolate between current yaxis and new yaxis position using remapped norm_height.\n    float final_ypos = lerp(v@P.y, pos, norm_height);\n    \n    // Clamp negative values.\n    v@P.y=clamp(final_ypos, 0, max_bbox.y);\n}"
+        },
+        "ray_min_dist": {
+            "reference_code": "77468763",
+            "section": "Ray Minimum Distance",
+            "code": "\"\"\" Ray minimum distance without volumes. \"\"\";\n\n// Get closes position value.\nvector minpos = minpos(1, v@P);\n\n// Set position.\nv@P = minpos; "
+        },
+        "bend": {
+            "reference_code": "35046837",
+            "section": "Recreate Bend Behaviour",
+            "code": "\"\"\" Recreate bend behaviour. \"\"\";\n\n// Get origin and capture direction vector to offset can capture deformation.\nvector origin = chv(\"origin\");\nvector cap_dir = chv(\"capture_direction\");\n\n// Get capture length and bend angle.\nfloat caplen = chf(\"caplen\");\nfloat bend_angle = chf(\"bend_angle\");\n\n// If the bend angle is less than 0.01, clamp the value.\nbend_angle = (abs(bend_angle)<0.01)? sign(bend_angle)*0.01:bend_angle;\n\n// Get offset matrix between two vectors.\nmatrix3 init_rot = dihedral(cap_dir,{1,0,0});\n\n// Transform object to comfortable position.\nvector deformed_pos = v@P-origin;\ndeformed_pos*=init_rot;\n\n// If the deformed position in x (comfortable position) is bigger than 0 and the angle is not 0, run the code.\n// This method won't compute deformation if values are below the origin.\nif(deformed_pos.x>0 && bend_angle!=0){\n\n    // Compute normalized position.\n    float capture_u = deformed_pos.x / caplen;\n    \n    // Compute radius of the transforming circumference.\n    float rad = caplen/radians(bend_angle);\n    \n    // Initialize final position.\n    vector final_pos;\n    \n    // If point is over the capture value, run the code.\n    if(capture_u>=1){\n    \n        // Initialize rotation matrix and rotate points.\n        matrix rot = ident();\n        rotate(rot, radians(bend_angle), 4);\n        \n        // Create final position for points over the capture length.\n        final_pos = set(deformed_pos.x-caplen, deformed_pos.y-rad, deformed_pos.z)*rot+set(0, rad, 0);\n    }\n    else{\n        \n        // Create angle values for each point.\n        float norm_bend = capture_u*bend_angle;\n        float bend_amt = radians(norm_bend);\n        \n        // Initialize rotation matrix and rotate points.\n        matrix rot = ident();\n        rotate(rot, bend_amt, 4);\n        \n        // Create final position for points inside the capture length.\n        final_pos = set(0, deformed_pos.y-rad, deformed_pos.z)*rot+set(0, rad, 0);\n    \n    }\n    \n    // Export final postion.\n    v@P = final_pos*invert(init_rot)+origin;\n}"
+        },
+        "smooth_geo": {
+            "reference_code": "99265810",
+            "section": "Smooth Geometry",
+            "code": "\"\"\" Smooth geometry. \"\"\";\n\n// Get point neighbours.\nint neis[] = neighbours(0, @ptnum);\n\n// Initialize median position with current position value.\nvector med_pos[] = array(v@P);\n\n// Iterate for each neighbour.\nforeach(int n; neis){\n\n    // Get neighbour position and append to median list.\n    vector pos = point(0, \"P\", n);\n    append(med_pos, pos);\n}\n\n// Export position attribute by dividing all positions by number of points.\nv@P = sum(med_pos) / (len(neis)+1);"
+        },
+        "sprite_orient": {
+            "reference_code": "29873726",
+            "section": "Sprite Orientation",
+            "code": "\"\"\" Compute sprite orientation for copy to points. \"\"\";\n\n// Get camera to extract transformations.\nstring cam = chs(\"camera\");\n\n// Extract transformation from operator.\nmatrix cam_xform = optransform(cam);\n\n// Convert matrix to matrix3 and then create the quaternion.\nvector4 orient = quaternion(matrix3(cam_xform));\n\n// Export orient attribute.\np@orient = orient;"
+        },
+        "angle_vectors": {
+            "reference_code": "89221217",
+            "section": "Angle Between Two Vectors",
+            "code": "\"\"\" Compute angle between two vectors. \"\"\";\n\n// Initialize values.\nvector up = v@up;\nvector axis = v@axis;\n\n// Get angle between two vectors.\nfloat angle = degrees(acos(dot(up, axis)));\n\n// Compute stable axis to check for values over 180.\nvector stable_axis = normalize(cross(up, cross({0,1,0}, up)));\n\n// Compute full 360 angle. \nfloat full_angle = (int(sign(dot(axis, stable_axis)))==-1)? angle:360-angle;\n\n// Set angle value.\nf@angle = full_angle;"
+        },
+        "cone_vector": {
+            "reference_code": "14266560",
+            "section": "Cone Vector From Position",
+            "code": "\"\"\" Create cone vector based on reference center. \"\"\";\n\n// Get center, cone_direction and max angle. \nvector cent = chv(\"center\");\nvector yaxis = normalize(chv(\"cone_direction\"));\nfloat max_angle = chf(\"max_angle\");\n\n// Compute direction from current point to center.\nvector dir = normalize(v@P-cent);\n\n// Compute zaxis by crossing dir and cone direction.\nvector zaxis = normalize(cross(dir, yaxis));\n\n// Create matrix using direction and yaxis.\nmatrix3 rot = maketransform(zaxis, yaxis);\n\n// Rotate matrix by maximum angle.\nrotate(rot, radians(-max_angle), zaxis);\n\n// Subtract yaxis.\nvector final_dir = set(getcomp(rot, 1, 0),\n                       getcomp(rot, 1, 1),\n                       getcomp(rot, 1, 2));\n\n// Export direction vector.\nv@dir = final_dir;"
+        },
+        "flow_vector": {
+            "reference_code": "75398837",
+            "section": "Flow Vector Reference Point",
+            "code": "\"\"\" Flow vector using a reference point position. \"\"\";\n\n// Initialize up vector.\nvector up = {0,1,0};\n\n// Get point reference position.\nvector pos = point(1, \"P\", 0);\n\n// Normalize direction vector.\nvector dir = normalize(v@P-pos);\n\n// Compute cross vector.\nvector cross = normalize(cross(dir, v@N));\n\n// Compute flow vector.\nvector flow = normalize(cross(v@N, cross));\n\n// Compute dot product between direction and normal.\nfloat dot = dot(dir, v@N);\n\n// Export dir attribute. \nv@dir = lerp(flow, dir, dot);"
+        },
+        "vector_along_curve": {
+            "reference_code": "72854126",
+            "section": "Vector Along Curve",
+            "code": "\"\"\" Create tangent based on neighbours in a line. \"\"\";\n\n// Get neighbours of current point and capture it's position.\nint neigh[] = neighbours(0, @ptnum);\nvector pos = point(0, \"P\", neigh[-1]);\n\n// Get direction vector by subtracting the current position to\n// the neighbour one and normalize the vector to get the proper\n// length to work with.\nvector tan = normalize(v@P-pos);\n\n// Check if the current point is equal to the maximum points\n// minus one (ptnum starts from 0) and negate tangent to obtain\n// the opposite direction.\nif(@ptnum==@numpt-1) tan*=-1;\n\n// Set attribute.\nv@tan = tan;"
+        },
+        "vector_between_pos": {
+            "reference_code": "4300925",
+            "section": "Vector Between Positions",
+            "code": "\"\"\" Get direction vector between two points. \"\"\";\n\n// Get point position to point to.\nvector to_pos = point(1, \"P\", @ptnum);\n\n// Get current point position to point from.\nvector from_pos = v@P;\n\n// Compute direction vector.\nvector dir = to_pos-from_pos;\n\n// Export direction attribute.\nv@dir = dir;"
+        },
+        "push_points": {
+            "reference_code": "73825197",
+            "section": "Push Points Volume",
+            "code": "\"\"\" Push Points Outisde Volumes. \"\"\";\n\n// Compute signed distance field value.\nfloat dist = volumesample(1, 0, v@P);\n\n// Compute gradient from volume.\nvector grad = volumegradient(1, 0, v@P);\n\n// Push points.\nif(dist<0.001) v@P -= normalize(grad)*dist;"
+        },
+        "kelvin_wake": {
+            "reference_code": "88960949",
+            "section": "Basic Kelvin Wake Deformer",
+            "code": "// Get reference directional and positional values.\nvector ref_pos = chv(\"reference_position\");\nvector ref_dir = normalize(chv(\"reference_direction\"));\nfloat max_angle = radians(chf(\"max_angle\") / 2);\n\n// Get dimension values.\nfloat width = chf(\"width\");\nfloat length = chf(\"length\");\n\n// Get frequency for \nint div_freq = chi(\"div_wave_frequency\");\nint trav_freq = chi(\"trav_wave_frequency\");\n\n// Get wave amplitude.\nfloat div_amp = chf(\"div_amplitude\");\nfloat trav_amp = chf(\"trav_amplitude\");\n\n// Get origin fade distance values.\nfloat orig_max_distance = chf(\"origin_mask_max\");\nfloat orig_min_distance = chf(\"origin_mask_min\");\n\n// Adjust distance from origin.\nfloat orig_dist = fit(distance(v@P, ref_pos), orig_min_distance, orig_max_distance, 0, 1);\n\n// Store position in a variable.\nvector pos = v@P;\n\n// Traversal Waves position.\nvector trav_pos = ref_pos + ref_dir * length * 2;\n\n// Compute Traversal Waves.\nfloat trav_dist = distance(trav_pos, pos);\nfloat wave_trav_dist = fit(trav_dist, 0, length * 2, 1, 0);\nfloat trav_wave_factor = fit11(cos(2*$PI*wave_trav_dist * trav_freq*2), 0, 1);\n\n// Get direction from reference position to current point position.\nvector dir = normalize(pos - ref_pos);\n\n// Compute out cone angle where the Divergent Waves will be visible. \nfloat out_cone = fit(dot(dir, ref_dir), 1, cos(max_angle), 1, 0);\nout_cone = pow(out_cone, 4);\n\n// Compute out cone angle where the Traversal Waves will be visible. \nfloat in_cone = fit(dot(dir, ref_dir), 1, cos(max_angle/2), 0, 1);\nin_cone = pow(in_cone, 4);\n\n// Compute mask length based on distance from origin.\nfloat length_mask = fit(distance(v@P, ref_pos), 0, length, 1, 0);\nlength_mask = pow(length_mask, 2);\n\n// Initialize divergent wave factor.\nfloat div_wave_factor = 0;\n\n// Iterate for each Divergent Wave side.\nfor (int a = 0; a < 2; a++) {\n\n    // Get side multiplier.\n    int side_angle = (a)? -1 : 1;\n    \n    // Rotate direction based on iteration.\n    matrix rot = ident();\n    rotate(rot, $PI/2*side_angle, {0, 1, 0});\n    \n    // Compute max radius based on length*2 chord arc and the angles. \n    float max_rad = (length*2)/(2*sin(max_angle));\n    \n    // Iteerate for each Divergent Wave input.\n    for(int i=0; i<div_freq; i++){\n    \n        // Check if the point is in the cone, has correct distance or it's already a wave. \n        if (div_wave_factor >= 1 || out_cone == 0 || length_mask == 0) break;\n        \n        // Compute iteration push length.\n        float it_length = max_rad/(div_freq)*i;\n        \n        // Compute push direction and new position based on it_length.\n        vector dir_side = ref_dir * rot;\n        vector new_pos = ref_pos + dir_side * it_length;\n\n        // Get distance between current position and new reference position.\n        float dist = distance(pos, new_pos);\n        \n        // Set capture distance with its width.\n        dist = fit(dist, it_length - width, it_length + width, 0, 1);\n        \n        // Create fade on maximum and minimum values.\n        dist = fit11(sin(radians(dist * 180)), 0, 1);\n\n        // Update Divergent Wave factor with the maximum value.\n        div_wave_factor = max(dist, div_wave_factor);\n    }\n}\n\n// Inver wave factors and apply corresponding masks.\ndiv_wave_factor = (1 - div_wave_factor) * out_cone * in_cone * length_mask * orig_dist;\ntrav_wave_factor = (1 - trav_wave_factor) * out_cone * orig_dist * length_mask;\n\n// Update Y position based on wave amplitude.\nv@P.y += div_wave_factor * div_amp + trav_wave_factor * trav_amp;\n\n// (Optional) Export color for each wave.\nv@Cd = set(div_wave_factor * div_amp, trav_wave_factor * trav_amp, 0) * 10;"
+        },
+        "wave_deformer": {
+            "reference_code": "81930198",
+            "section": "Wave Deformer",
+            "code": "\"\"\" Create a wave deform. \"\"\";\n\nvector wave_pos = chv(\"wave_position\");\nvector wave_rot = chv(\"wave_rotation\");\nfloat distance = chf(\"distance\");\nfloat angle = radians(chf(\"angle\"));\nfloat wave_line = chf(\"wave_line\");\n\n// Extract transforms from target values.\nmatrix xform = maketransform(0,0, wave_pos, wave_rot);\nvector new_pos = v@P*invert(xform);\n\n// Create expansion value based on\nvector expand = new_pos;\nexpand.z*=wave_line;\n\n// Comput exponential value of the distance between expansion and input distance.\nfloat expand_amount = length(expand);\nfloat effect_falloff = exp(expand_amount/distance*-1);\n\n// Multiply angles by the falloff effect.\nfloat mult_angle =  effect_falloff*angle;\n\n// Create wave transformation matrix.\nmatrix wave_m = ident();\nrotate(wave_m, mult_angle, 4);\n\n// Create new position.\nvector def_pos = new_pos*wave_m;\n\n// Export position attribute.\nv@P = def_pos*xform;"
+        }
+    },
+    "Detail": {
+        "most_repeated_value": {
+            "reference_code": "30011921",
+            "section": "Most Repeated Value Array",
+            "code": "\"\"\" Find the most repeated element in the array. \"\"\";\n\n// Create or input an array.\nfloat smp_array[] = array(0,1,2,2,3,3,4,5);\nint array_len = len(smp_array);\n\n// Sort array, required for the algorithm\nsmp_array = sort(smp_array);\n\n// Initialize counting.\nfloat max_repeated = -2;\nint max_items = -1;\n\n// Algorithm trackers, seeded with the first item\nint count = 1;\nfloat prev_item = smp_array[0];\n\n// Check for the most repeated element in the array.\nfor(int i=1; i<array_len; i++){ // skip first item\n    float item = smp_array[i];\n   \n    // Increase count when it matches\n    if(item == prev_item) count ++;\n    else{\n        // When the item changes, with the array being sorted,\n        // the current max_items is the largest it will be for prev_item\n        if(count > max_items){\n            max_repeated = prev_item;\n            max_items = count;\n        }\n       \n        // Reset trackers\n        prev_item = item;\n        count = 1;\n    }\n}\n\n// Store max repeated attribute.\nf@max_repeated = max_repeated;\ni@max_items = max_items;"
+        },
+        "remove_duplicates": {
+            "reference_code": "31145437",
+            "section": "Remove Array Duplicates",
+            "code": "\"\"\" Remove array duplicates. \"\"\";\n\n// Create or input an array and sort it.\nfloat smp_array[] = array(0,1,2,2,3,3,4,5);\nsmp_array = sort(smp_array);\n\n// Get previous value for the iteration.\nfloat prev_val = smp_array[0];\n\n// Remove first element of the array.\nsmp_array = smp_array[1:];\n\n// Initialize final array.\nfloat final_array[] = array(prev_val);\n\n// Iterate for each value in the array.\nforeach(float val; smp_array){\n    \n    // Check if value is equal to the previous value.\n    if(prev_val != val) append(final_array, val);\n    \n    // Update previous value.\n    prev_val = val;\n}\n\n// Store array attribute.\nf[]@array = final_array;"
+        },
+        "cam_dir": {
+            "reference_code": "2930099",
+            "section": "Camera Direction",
+            "code": "\"\"\" Get camera direction. \"\"\";\n\n// Get camera to extract transformations.\nstring cam = chs(\"camera\");\n\n// Extract transformation from operator.\nmatrix cam_xform = optransform(cam);\n\n// Transform static direction with rotation matrix.\nvector dir = {0,0,-1}*matrix3(cam_xform);\n\n// Export camera direction. \nv@cam_dir = dir;"
+        },
+        "cam_transform": {
+            "reference_code": "51915380",
+            "section": "Camera Transformations",
+            "code": "\"\"\" Get camera transformations. \"\"\";\n\n// Get camera to extract transformations.\nstring cam = chs(\"camera\");\n\n// Extract transformation from operator.\nmatrix cam_xform = optransform(cam);\n\n// Export translate and rotation quaternion.\nv@translate = cracktransform(0,0,0,{0,0,0},cam_xform);\np@rotate = eulertoquaternion(cracktransform(0,0,1,{0,0,0},cam_xform), 0);\n4@xform = cam_xform;"
+        },
+        "int_to_str": {
+            "reference_code": "44470061",
+            "section": "Convert Integer To String",
+            "code": "\"\"\" Convert integer values into strings. \"\"\";\n\n// Create or import the integer value.\nint value = 2;\n\n// Create a name including the converted integer value.\nstring name = \"piece_\" + itoa(value);\n\n// Export string attribute.\ns@name = name;"
+        },
+        "str_to_flt_shash": {
+            "reference_code": "46533271",
+            "section": "Convert String To Float",
+            "code": "\"\"\" Convert string values into floating values (basic way). \"\"\";\n\n// Create or import the integer value.\nstring name = \"string\";\n\n// Create a random value using the string.\nfloat value = rand(random_shash(name));\n\n// Export float attribute.\nf@name = value;"
+        },
+        "str_to_flt_utf": {
+            "reference_code": "46533271",
+            "section": "Convert String To Float",
+            "code": "\"\"\" Convert string values into floating values (basic way). \"\"\";\n\n// Create or import the integer value.\nstring name = \"string\";\n\n// Decode string using utf8.\nint values[] = decodeutf8(name);\n\n// Initialize utfval.\nstring utfval=\"\";\n\n// Loop for each of the values.\nforeach(int v; values){\n    \n    // Convert integer to string.\n    string val = itoa(v);\n    \n    // Concat with previous iteration. \n    utfval+=val;\n}\n\n// Create random value converting string to integer.\nfloat value = rand(atoi(utfval));\n\n// Export float attribute.\nf@value = value;"
+        },
+        "degree_to_dot": {
+            "reference_code": "59668810",
+            "section": "Degrees To Dot Value",
+            "code": "\"\"\" Create checker using ternary conditions. \"\"\";\n\n// Set the frequency for the scene.\nfloat freq = chf(\"frequency\");\n\n// Compute vertical sections.\nv@Cd = (sin(v@P.x*freq)<0)?0:1;\n\n// Add horizontal sections.\nv@Cd += (sin(v@P.z*freq)<0)?0:1;\n\n// Check if there's coincidence and multiply by 0.\nv@Cd *= (v@Cd.r==2)?0:1;"
+        },
+        "create_box": {
+            "reference_code": "93703926",
+            "section": "Create Box",
+            "code": "\"\"\" Create default box. \"\"\";\n\n// Create reusable void function.\nvoid createPrim(int pt0, pt1, pt2, pt3){\n    \n    // Create primitives using arrays.\n    int prim_pts[] = array(pt0, pt1, pt2, pt3);\n    addprim(0,'poly', prim_pts);\n}\n\n// Create points.\nint pt0 = addpoint(0, {0.5,-0.5,0.5});\nint pt1 = addpoint(0, {0.5,-0.5,-0.5});\nint pt2 = addpoint(0, {-0.5,-0.5,-0.5});\nint pt3 = addpoint(0, {-0.5,-0.5,0.5});\nint pt4 = addpoint(0, {0.5,0.5,0.5});\nint pt5 = addpoint(0, {0.5,0.5,-0.5});\nint pt6 = addpoint(0, {-0.5,0.5,-0.5});\nint pt7 = addpoint(0, {-0.5,0.5,0.5});\n\n// Create primitives using void function.\ncreatePrim(pt0, pt1, pt2, pt3);\ncreatePrim(pt0, pt4, pt5, pt1);\ncreatePrim(pt1, pt5, pt6, pt2);\ncreatePrim(pt2, pt6, pt7, pt3);\ncreatePrim(pt3, pt7, pt4, pt0);\ncreatePrim(pt6, pt5, pt4, pt7);"
+        },
+        "create_bound": {
+            "reference_code": "95461313",
+            "section": "Create Bound",
+            "code": "\"\"\" Create bounding box from object. \"\"\";\n\n// Create reusable void function.\nvoid createPrim(int pt0, pt1, pt2, pt3){\n    \n    // Create primitives using arrays.\n    int prim_pts[] = array(pt0, pt1, pt2, pt3);\n    addprim(0,'poly', prim_pts);\n}\n\n// Get max and min bbox dimensions.\nvector max = getbbox_max(1); \nvector min = getbbox_min(1);\n\n// Create points with their max and min positions.\nint pt0 = addpoint(0, set(min.x, max.y, min.z));\nint pt1 = addpoint(0, set(min.x, max.y, max.z));\nint pt2 = addpoint(0, set(max.x, max.y, max.z));\nint pt3 = addpoint(0, set(max.x, max.y, min.z));\nint pt4 = addpoint(0, set(min.x, min.y, min.z));\nint pt5 = addpoint(0, set(min.x, min.y, max.z));\nint pt6 = addpoint(0, set(max.x, min.y, max.z));\nint pt7 = addpoint(0, set(max.x, min.y, min.z));\n\n// Create primitives based on the proper winding.\ncreatePrim(pt3, pt2, pt1, pt0);\ncreatePrim(pt4, pt5, pt6, pt7);\ncreatePrim(pt1, pt2, pt6, pt5);\ncreatePrim(pt2, pt3, pt7, pt6);\ncreatePrim(pt3, pt0, pt4, pt7);\ncreatePrim(pt0, pt1, pt5, pt4);"
+        },
+        "create_circle": {
+            "reference_code": "32305122",
+            "section": "Create Circle",
+            "code": "\"\"\" Create circle. \"\"\";\n\n// Initialize parameters.\nint div = clamp(chi(\"divisions\"), 2, int(1e09));\nfloat uniform_scale = chf(\"uniform_scale\");\nvector2 radius = chu(\"radius\");\nint open = chi(\"open_arc\");\n\n// Initialize point array to store created points.\nint pts[];\n\n// Iterate for each division points.\nfor(int pt=0; pt<div; pt++){\n    \n    // Compute radians for each iteration.\n    float rad = $PI*2/div*pt;\n    \n    // Compute position using radians and scaling values.\n    vector pos = set(cos(rad)*radius.x,\n                     sin(rad)*radius.y, \n                     0)*uniform_scale;\n    \n    // Create point and add number to point array.\n    int p = addpoint(0, pos);\n    append(pts, p);\n}\n\n// Append last number to close circle.\nappend(pts, pts[0]);\n\n// If user wants open geo, create a polyline. Otherwise, create a closed poly.\n(open==1)? addprim(0, \"polyline\", pts):addprim(0, \"poly\", pts);"
+        },
+        "create_grid": {
+            "reference_code": "61834398",
+            "section": "Create Grid",
+            "code": "\"\"\" Create grid. \"\"\";\n\n// Get size, rows and columns.\nvector2 size = chu(\"size\");\nint col = clamp(chi(\"columns\"), 2, int(1e09));\nint row = clamp(chi(\"rows\"), 2, int(1e09));\n\n// Initialize point array.\nint pts[];\n\n// Iterate for each row.\nfor(int r=0; r<row;r++){\n    \n    // Normalize row values.\n    float norm_r = r/(row-1.0);\n    \n    // Iterate for each column.\n    for(int c=0; c<col; c++){\n    \n        // Normalize column values.\n        float norm_c = c/(col-1.0); \n        \n        // Compute x and z positions.\n        float posx = (0.5-norm_r)*size.x;\n        float posz = (0.5-norm_c)*size.y;\n        vector pos = set(posx,0,posz);\n        \n        // Create point with computed position and append to point array.\n        int pt = addpoint(0, pos);\n        append(pts, pt);\n    }\n}\n\n// Iterate for each created point.\nforeach(int p; pts){\n    \n    // Chech if current point is in the last row or column. If so, skip it.\n    if(p>=(row-1)*col || (p+1)%col == 0) continue;\n    \n    // Get ptnum to create poly.\n    int pt0 = pts[p]; \n    int pt1 = pts[p+1];\n    int pt2 = pts[pt1+col];\n    int pt3 = pts[pt0+col]; \n    \n    // Create poly.\n    addprim(0, \"poly\", pt3, pt2, pt1, pt0);\n}"
+        },
+        "create_line": {
+            "reference_code": "58694772",
+            "section": "Create Line",
+            "code": "\"\"\" Create line. \"\"\";\n\n// Get number of points and length for the line.\nint points = chi(\"points\");\nfloat length = chf(\"length\");\n\n// Initialize point array.\nint pts[];\n\n// Iterate for each points.\nfor(int i=0; i<points; i++){\n    \n    // Compute height value.\n    float height = length/(points-1);\n    \n    // Create position value.\n    vector pos = set(0, height*i, 0);\n    \n    // Create point and append to point array list. \n    int pt = addpoint(0, pos);\n    append(pts, pt);\n}\n\n// Create poly line using point array.\naddprim(0, \"polyline\", pts);"
+        },
+        "create_sphere": {
+            "reference_code": "51628042",
+            "section": "Create Sphere",
+            "code": "\"\"\" Create sphere. \"\"\";\n\n// Get rows, columns and radius.\nint rows = chi(\"rows\");\nint cols = chi(\"columns\");\nvector radius = chv(\"radius\")*2;\n\n// Initialize point array.\nint pts[];\n\n// Iterate for each row.\nfor(int r=0; r<rows;r++){\n    \n    // If the row is 0, create polar top point.\n    if(r==0){\n        int pt = addpoint(0, set(0,radius.y,0));\n        append(pts, pt);\n        continue;\n    }\n    \n    // If the row is 0, create polar bottom point.\n    else if(r==rows-1){\n        int pt = addpoint(0, set(0,-radius.y,0));\n        append(pts, pt);\n        continue;\n    }\n    \n    // Compute height angle.\n    float h = r*($PI/(rows-1));\n    \n    // Iterate for each column.\n    for(int c=0; c<cols; c++){\n        \n        // Compute width angle.\n        float w = c*($PI*2/cols);\n        \n        // Compute position point.\n        vector pos = set(sin(h)*cos(w), cos(h), sin(h)*sin(w))*radius;\n        \n        // Create point and append to point array.\n        int p = addpoint(0, pos);\n        append(pts, p);\n    }\n}\n\n\n// Iterate for each point created.\nforeach(int pt; pts){\n    \n    // Get first and last rows.\n    int first_row[] = pts[1:cols+1];\n    int last_row[] = pts[-cols-1:-1];\n    \n    // Create pirimitives connected to the top polar point.\n    if(pt==0){\n        foreach(int c_pt; first_row){\n            int next_pt = (c_pt==first_row[-1])? first_row[0]:c_pt+1;\n            addprim(0, \"poly\", pt, c_pt, next_pt, pt);\n        }\n    }\n    \n    // Create pirimitives connected to the bottom polar point.\n    else if(pt==len(pts)-1){\n        foreach(int c_pt; last_row){\n            int next_pt = (c_pt==last_row[-1])? last_row[0]:c_pt+1;\n            addprim(0, \"poly\", pt, next_pt, c_pt, pt);\n        }\n    }\n    \n    // If the current point is not in the last row, run the code.\n    else if(find(last_row, pt)<0){\n    \n        // Get second, third and fourth point.\n        int f_pt = (pt%cols==0)? pt+1-cols: pt+1;\n        int t_pt = f_pt+cols;\n        int s_pt = pt+cols;\n        \n        // Create primitive using all the points.\n        addprim(0, \"poly\", pt, s_pt, t_pt, f_pt);\n    }\n}"
+        },
+        "create_spiral": {
+            "reference_code": "53096382",
+            "section": "Create Spiral",
+            "code": "\"\"\" Create spiral. \"\"\";\n\n// Get number of points, length, coils and radius for the spring.\nint points = chi(\"points\");\nint coil = clamp(chi(\"coils\"), 1, int(1e09));\nvector2 radius = chu(\"radius\");\n\n// Initialize point array.\nint pts[];\n\n// Iterate for each points.\nfor(int i=0; i<points; i++){\n    \n    // Normalize point value.\n    float norm_w = 1.0/(points-1);\n    \n    // Get current iteration value.\n    float current_w = norm_w*i;\n    \n    // Compute expand factor for each coil.\n    float expand_factor = $PI*2*current_w*coil;\n    \n    // Expand in x and z axes based on expand factor, coil and radius.\n    float xaxis = sin(expand_factor)*expand_factor/coil;\n    xaxis*=radius.x;\n    float zaxis = cos(expand_factor)*expand_factor/coil;\n    zaxis*=radius.y;\n    \n    // Create position value.\n    vector pos = set(xaxis, 0, zaxis);\n    \n    // Create point and append to point array list. \n    int pt = addpoint(0, pos);\n    append(pts, pt);\n}\n\n// Create poly line using point array.\naddprim(0, \"polyline\", pts);"
+        },
+        "create_spring": {
+            "reference_code": "3984189",
+            "section": "Create Spring",
+            "code": "\"\"\" Create spring. \"\"\";\n\n// Get number of points, length, coils and radius for the spring.\nint points = chi(\"points\");\nfloat length = chf(\"length\");\nint coil = clamp(chi(\"coils\"), 1, int(1e09));\nvector2 radius = chu(\"radius\");\n\n// Initialize point array.\nint pts[];\n\n// Iterate for each points.\nfor(int i=0; i<points; i++){\n    \n    // Compute height value.\n    float height = length/(points-1);\n    \n    // Normalize height value.\n    float norm_h = height*i/length;\n    \n    // Compute expand factor for each coil.\n    float expand_factor = $PI*2*coil*norm_h;\n    float xaxis = sin(expand_factor)*radius.x;\n    float zaxis = cos(expand_factor)*radius.y;\n    \n    // Create position value.\n    vector pos = set(xaxis, height*i, zaxis);\n    \n    // Create point and append to point array list. \n    int pt = addpoint(0, pos);\n    append(pts, pt);\n}\n\n// Create poly line using point array.\naddprim(0, \"polyline\", pts);"
+        },
+        "create_torus": {
+            "reference_code": "7003422",
+            "section": "Create Torus",
+            "code": "\"\"\" Create torus. \"\"\";\n\n// Get rows, columns, width and radius.\nint rows = chi(\"rows\");\nint cols = chi(\"columns\");\nvector width = chv(\"width\")*2;\nvector radius = chv(\"radius\")*2;\n\n// Initialize point array.\nint pts[];\n\n// Iterate for each row.\nfor(int r=0; r<rows;r++){\n    \n    // Compute height angle.\n    float h = r*($PI*2/(rows));\n    \n    // Iterate for each column.\n    for(int c=0; c<cols; c++){\n        \n        // Compute width angle.\n        float w = c*($PI*2/(cols));\n        \n        // Compute position point.\n        vector pos = set(sin(h)*cos(w), cos(h), sin(h)*sin(w))*width;\n        pos+=set(cos(w), 0, sin(w))*radius;\n        \n        // Create point and append to point array.\n        int p = addpoint(0, pos);\n        append(pts, p);\n    }\n}\n\n// Get last column point num.\nint last_row[] = pts[-cols:];\n\n// Iterate for each created points.\nforeach(int pt; pts){\n    \n    // Get second, third and fourth point.\n    int s_pt = pt+cols;\n    int t_pt = ((s_pt+1)%cols==0)? s_pt+1-cols:s_pt+1;\n    int f_pt = t_pt-cols;\n    \n    // Update second, third and fourth point if the current point is inside of the last row.\n    if(find(last_row, pt)>=0){\n        \n        s_pt = pt-last_row[0];\n        t_pt = (pt==last_row[-1])? 0:s_pt+1;\n        f_pt = last_row[0]+t_pt;\n    }\n    \n    // Create primitive using all the points.\n    addprim(0, \"poly\", pt, s_pt, t_pt, f_pt);\n}"
+        },
+        "create_tube": {
+            "reference_code": "61391039",
+            "section": "Create Tube",
+            "code": "\"\"\" Create default tube. \"\"\";\n\n// Set columns.\nint col = chi(\"columns\");\n\n// Initialize point number and point position arrays.\nint all_pts[]; \nvector all_pos[];\n\n// Loop 2 times to create reference winding faces.\nfor(int a=0; a<2;a++){\n    \n    // Loop col times to create the primitive points.\n    for(int i=0; i<col; i++){\n        \n        // Compute degrees in radians.\n        float rad = $PI*2/col;\n        \n        // Compute the x and y axes.\n        float x = sin(rad*i);\n        float z = cos(rad*i);\n        \n        // Compute positions using x and z. Use y to place points in height.\n        vector pos = (a)? set(x,-1,z)/2 : set(x,1,z)/2;\n        \n        // Create points.\n        int pt = addpoint(0, pos);\n        \n        // Append points and positions to arrays.\n        append(all_pts, pt);\n        append(all_pos, pos);\n    } \n}\n\n// Separate core primitive points into two groups.\nint first_prim[] = all_pts[:col];\nint second_prim[] = all_pts[col:];\n\n// Create primitives. One with reversed windings.\naddprim(0, \"poly\", reverse(first_prim));\naddprim(0, \"poly\", second_prim);\n\n// Iterate for each point of the first primitive.\nfor(int i=0; i<len(first_prim); i++){\n    \n    // Find next equivalent position. Set first position if current point \n    // is the last point in the first primitive.\n    vector next_pos_equiv = (first_prim[i]==first_prim[-1])? all_pos[0]:all_pos[i+1];\n    \n    // Invert z axis.\n    next_pos_equiv.y*=-1;\n    \n    // Find equivalent point index. all_pos index = all_pts value \n    int equiv_pt = find(all_pos, next_pos_equiv);\n    \n    // Canstruct winding order. \n    // Set first point of the first prim and last point of the second prim\n    // if current point is the last point in the first primitive.\n    int prim_pts[] = (first_prim[i]==first_prim[-1])? array(i, first_prim[0], equiv_pt, second_prim[-1]) : \n                                   array(first_prim[i], first_prim[i+1], equiv_pt, equiv_pt-1);\n    \n    // Create primitive using the winding order.\n    addprim(0, \"poly\", prim_pts);\n}\n"
+        },
+        "err_warning": {
+            "reference_code": "21550162",
+            "section": "Error And Warning",
+            "code": "\"\"\" Error and warning based on condition. \"\"\";\n\n// Get geometry type.\nstring geo_type = primintrinsic(0, \"typename\", @primnum);\n\n// If volume or VDB, error.\nif(geo_type==\"Volume\" || geo_type==\"VDB\"){\n    error(\"The type %s is not valid. Please use a different type of geometry.\", geo_type);\n}\n\n// If PackedGeometry, warning.\nelse if(geo_type==\"PackedGeometry\"){\n    warning(\"The type %s is valid, but might output unexpected results.\", geo_type);\n}"
+        },
+        "report": {
+            "reference_code": "37135085",
+            "section": "Print Values",
+            "code": "\"\"\" Print values to the console. \"\"\";\n\n// Print depending on the dataype.\nprintf(\"This is an example of how you would print a vector value: %g\\n\\n\", {0,1,0});\nprintf(\"This is an example of how you would print a float value: %f\\n\\n\", $PI);\nprintf(\"This is an example of how you would print a string value: %s\\n\\n\", \"Hello World!\");\nprintf(\"This is an example of how you would print a integer value: %d\\n\\n\", 1);\nprintf(\"This is an example of how you would print a %% sign: %%\\n\\n\", 1);"
+        },
+        "remove_unused_grps": {
+            "reference_code": "98260679",
+            "section": "Remove Unused Groups",
+            "code": "\"\"\" Remove unused groups. \"\"\";\n\n// Get point groups and remove if number of items is 0.\nstring pt_grps[] = detailintrinsic(0, \"pointgroups\");\nforeach(string grp; pt_grps) (npointsgroup(0, grp)==0)? removepointgroup(0, grp): 1;\n\n// Get prim groups and remove if number of items is 0.\nstring prim_grps[] = detailintrinsic(0, \"primitivegroups\");\nforeach(string grp; prim_grps) (nprimitivesgroup(0, grp)==0)? removeprimgroup(0, grp): 1;\n\n// Get vertex groups and remove if number of items is 0.\nstring vxt_grps[] = detailintrinsic(0, \"vertexgroups\");\nforeach(string grp; vxt_grps) (nverticesgroup(0, grp)==0)? removevertexgroup(0, grp): 1;"
+        },
+        "run_at_frame": {
+            "reference_code": "87482557",
+            "section": "Run At Frame",
+            "code": "\"\"\" Run code at specific frame. \"\"\";\n\n// If frame is equal to 10, run the code.\nif(@Frame==10){\n    \n    // Print formatted string.\n    printf(\"This condition runs at frame %d.\", @Frame);\n}"
+        },
+        "get_offset_matrix": {
+            "reference_code": "30376309",
+            "section": "Extract Transform",
+            "code": "\"\"\"Retrieve offset comparing original rest and moving poses. \"\"\";\n\n// Get point neighbour point.\nint nb_pts = neighbour(1, 0, 0);\n\n// Get the position of transformed point.\nvector nb_pos = point(2, 'P', 0);\n\n// Compute zaxis based on current and neighbour point direction. \nvector zaxis = normalize(nb_pos - point(2, 'P', nb_pts));\n\n// Use normal to create y axis.\nvector yaxis = point(2, \"N\", 0);\n\n// Store transformation matrix from transformed axis and position point.\nmatrix trans_xform = maketransform(zaxis, yaxis, nb_pos);\n\n// Get the position of rest point.\nnb_pos = point(1, \"P\", 0);\n\n// Compute zaxis based on current and neighbour point direction. \nzaxis = normalize(point(1, \"P\", 0) - point(1, 'P', nb_pts));\n\n// Use normal to create y axis.\nyaxis = point(1, \"N\", 0);\n\n// Store transformation matrix from rest axis and position point.\nmatrix rest_xform = maketransform(zaxis, yaxis, nb_pos);\n\n// Compute offset matrix by inverting rest matrix.\nmatrix totalxform = invert(rest_xform)*trans_xform;\n\n// Create point and set the attribute.\nint pt = addpoint(0, {0,0,0});\nsetpointattrib(0, \"xform\", pt, totalxform);"
+        },
+        "circle_and_vector_intersect": {
+            "reference_code": "86495975",
+            "section": "Circle And Vector Intersect",
+            "code": "\"\"\" Circle and vector intersection. \"\"\";\n\n// x(t) = x0 + t * vx and y(t) = y0 + t * vy being t the distance along the vector.\n// (x − xc)^2 + (y − yc)^2 = r^2 circle equation.\n\n// Initialize default values.\nvector pt_pos = chv(\"point_position\");\nvector ref_dir = normalize(chv(\"point_direction\"));\nvector circle_center = chv(\"circle_center\");\nfloat rad = chf(\"radius\");\nfloat angle = chf(\"angle\");\n\n// Get center difference.\nvector cent_diff = pt_pos-circle_center;\n\n// Coeficients cuadratic equation.\nfloat A = dot(ref_dir, ref_dir); // A = vx^2 + vy^2 (length of the vector).\nfloat B = 2*dot(cent_diff, ref_dir); // B = 2 * ((x0-xc)*vx + (y0-yc)*vy) (circle direction realtionship).\nfloat C = dot(cent_diff, cent_diff) - rad*rad; // C = (x0-xc)^2 + (y0-yc)^2 - r^2 (center to point rad based).\n\n// Cuadratic equation.\nfloat disc = B*B-4*A*C;\nfloat first_inter_dist = (-B-sqrt(disc))/(2*A);\nfloat second_inter_dist = (-B+sqrt(disc))/(2*A);\n\n// Compute new position.\nvector first_inter_pos;\nvector second_inter_pos;\n\n// Check if the vector intersects.\nif(disc>=0){\n\n    // Get two intersections.\n    first_inter_pos = pt_pos+first_inter_dist*ref_dir;\n    second_inter_pos = pt_pos+second_inter_dist*ref_dir;\n}\n\nelse warning(\"The current %d reference direction doesn't intersect with the circle.\", ref_dir);\n"
+        },
+        "normalize_distance_detail": {
+            "reference_code": "89906276",
+            "section": "Normalize Distance",
+            "code": "\"\"\" Normalize distance attribute. \"\"\";\n\n// Get amount of point from first input.\nint pts = npoints(0);\n\n// Get position from the second input.\nvector ref_pos = point(1, \"P\", 0);\n\n// Create handle using the pcopen.\nint handle = pcopen(0, \"P\", ref_pos, 1e09, int(1e09));\n\n// Get farthest distance of the point cloud.\nfloat max_dist = pcfarthest(handle);\n\n// Iterate for each point.\nfor(int pt=0; pt<pts; pt++){\n\n    // Get current point position.\n    vector curr_pos = point(0, \"P\", pt);\n    \n    // Compute current distance.\n    float dist = distance(curr_pos, ref_pos);\n    \n    // Normalize distance and remap color.\n    float norm_dist = dist/max_dist;\n    vector color = chramp(\"ramp_color\", norm_dist);\n    \n    // Set color attrivute to show the normalized distance.\n    setpointattrib(0, \"Cd\", pt, color);\n}"
+        },
+        "vector_intersect": {
+            "reference_code": "70358649",
+            "section": "Two Vector Intersect",
+            "code": "\"\"\" Get intersection position between two vectors in a position. \"\"\";\n\n// Initialize point positions.\nvector origin_pt1 = set(0.5, 0, 0);\nvector origin_pt2 = set(-0.5, 0, 0);\nvector pos = {0,0,0};\n\n// Initialize direction vector.\nvector dir_pt1 = set(-0.7, 2, 0);\nvector dir_pt2 = set(0.7, 0.7, 0);\n\n// Define the points using the origin and direction.\nvector final_pt1 = origin_pt1 + dir_pt1;\nvector final_pt2 = origin_pt2 + dir_pt2;\n\n// Calculate the denominator of the intersection formula.\nfloat denominator = (origin_pt1.x - final_pt1.x) * (origin_pt2.y - final_pt2.y) - \n                    (origin_pt1.y - final_pt1.y) * (origin_pt2.x - final_pt2.x);\n\n// Avoid division by zero.\nif (abs(denominator) > 1e-6) {\n\n    // Calculate the numerators for Px and Py.\n    float Px_numer = ((origin_pt1.x * final_pt1.y - origin_pt1.y * final_pt1.x) * (origin_pt2.x - final_pt2.x)) - \n                     ((origin_pt1.x - final_pt1.x) * (origin_pt2.x * final_pt2.y - origin_pt2.y * final_pt2.x));\n\n    float Py_numer = ((origin_pt1.x * final_pt1.y - origin_pt1.y * final_pt1.x) * (origin_pt2.y - final_pt2.y)) - \n                     ((origin_pt1.y - final_pt1.y) * (origin_pt2.x * final_pt2.y - origin_pt2.y * final_pt2.x));\n\n    // Calculate intersection position.\n    pos = set(Px_numer / denominator, Py_numer / denominator, 0);\n\n}\n\n// Store intersection position.\nv@intersect_pos = pos;"
+        },
+        "sample_sphere_manual": {
+            "reference_code": "20906416",
+            "section": "Vector Sample Sphere",
+            "code": "\"\"\" Sample sphere. \"\"\";\n\n// Get amount of samples.\nint samples = chi(\"samples\");\n\n// Iterate for each sample.\nfor(int i=0; i<samples; i++){\n\n    // Compute direction using iteration value.\n    vector pos = normalize(set(fit01(rand(i), -1, 1),\n                               fit01(rand(i+1), -1, 1),\n                               fit01(rand(i+2), -1, 1)));\n\n    // Create point using computed position.                \n    addpoint(0, pos);\n}"
+        },
+        "sample_sphere_func": {
+            "reference_code": "20906416",
+            "section": "Vector Sample Sphere",
+            "code": "\"\"\" Sample sphere. \"\"\";\n\n// Get amount of samples.\nint samples = chi(\"samples\");\n\n// Iterate for each sample.\nfor(int i=0; i<samples; i++){\n    \n    // Compute create random seed. \n    vector seed = rand(i);\n    \n    // Compute normalized position using sample sphere uniform. \n    vector pos = normalize(sample_sphere_uniform(seed));\n    \n    // Create point using computed position.                \n    addpoint(0, pos);\n}"
+        }
+    },
+    "Primitives": {
+        "primpoints": {
+            "reference_code": "45043176",
+            "section": "Cluster By Point Proximity",
+            "code": "\"\"\" Compute clusters avoiding promoting parameter. \"\"\";\n\n// Get primitive points.\nint pts[] = primpoints(0, @primnum);\n\n// Initialize cluster as -1.\nint cluster=-1;\n\n// Iterate for each primitive points.\nforeach(int i; pts){\n\n    // Get position of the current point.\n    vector pos = point(0, \"P\", i);\n    \n    // Get near point from second input.\n    int new_cluster = nearpoint(1, pos);\n    \n    //If the previous cluster is bigger keep it (emulates the max method).\n    if(new_cluster>cluster){       \n        cluster = new_cluster;\n    }\n}\n\n// Set the cluster.\ni@cluster = cluster;"
+        },
+        "connectivity_udim": {
+            "reference_code": "93149288",
+            "section": "UDIM Connectivity",
+            "code": "\"\"\" Create attribute per UDIM. \"\"\";\n\n// Get uv information using parametric uvs (just to not have to convert to points or vertices). \nvector2 uv = primuv(0, \"uv\", @primnum, {0.5,0.5});\n\n// Round up the uv values.\nuv = ceil(uv);\n\n// Construct UDIM value convention. \nfloat uv_num = 1000 + (uv.x) + ((uv.y-1)*10);\n\n// Export uv name attribute.\ni@uv_name = int(uv_num);"
+        },
+        "cull_geo": {
+            "reference_code": "62282432",
+            "section": "Camera Frustum Cull",
+            "code": "\"\"\" Cull based on camera view. \"\"\";\n\n// Get culling camera.\nstring cam = chs(\"camera\");\n\n// Initialize expansion values (x,y) and depth values.\nfloat expand_top = chf(\"expand_top\");\nfloat expand_bottom = chf(\"expand_bottom\");\nfloat expand_right = chf(\"expand_right\");\nfloat expand_left = chf(\"expand_left\");\nfloat far = chf(\"far_clip\");\nfloat near = chf(\"near_clip\");\n\n// Convert coordinates to NDC.\nvector pos = toNDC(cam, v@P);\n\n// Check if something is outside the camera and remove it.\nif(pos.y>(1+expand_top)) removeprim(0, @primnum, 1);\nif(pos.y<(-expand_bottom)) removeprim(0, @primnum, 1);\nif(pos.x<(-expand_left)) removeprim(0, @primnum, 1);\nif(pos.x>(1+expand_right)) removeprim(0, @primnum, 1);\nif(pos.z>(-near)) removeprim(0, @primnum, 1);\nif(pos.z<(-far)) removeprim(0, @primnum, 1);"
+        },
+        "primitive_centroid": {
+            "reference_code": "68118455",
+            "section": "Create Primitive Centroid",
+            "code": "\"\"\" Compute bbox center. \"\"\";\n\n// Get bounding box center.\nvector pos = v@P;\n\n// Create point using the computed position.\naddpoint(0, pos);\n\n// Remove unused primitive.\nremoveprim(0, @primnum, 1);"
+        },
+        "ngon_detector": {
+            "reference_code": "50655883",
+            "section": "NGon Detector",
+            "code": "\"\"\" Group ngons to fix them later. \"\"\";\n\n// Detect amount of points composing each primitive.\nint pts[] = primpoints(0, i@primnum);\n\n// Check if length of the array is bigger than 4.\nif(len(pts)>4){\n    \n    // Set point group.\n    setprimgroup(0, \"ngons\", i@primnum, 1);\n}"
+        },
+        "measure": {
+            "reference_code": "9604585",
+            "section": "Primitive Dimensions",
+            "code": "\"\"\" Get dimension values from intrinsic attributes. \"\"\";\n\n// Set volume, area and perimeter.\nf@volume = primintrinsic(0, \"measuredvolume\", @primnum);\nf@area = primintrinsic(0, \"measuredarea\", @primnum);\nf@perimeter = primintrinsic(0, \"measuredarea\", @primnum);"
+        },
+        "prim_type": {
+            "reference_code": "914613",
+            "section": "Primitive Type Checker",
+            "code": "\"\"\" Get primitive type from intrinsic attributes. \"\"\";\n\n// Set primitive type.\ns@prim_type = primintrinsic(0, \"typename\", @primnum);"
+        },
+        "carve": {
+            "reference_code": "46938032",
+            "section": "Carve Primitive",
+            "code": "\"\"\" Carve curve. \"\"\";\n\n// Include groom library.\n#include <groom.h>\n\n// Get the distance to keep.\nfloat dist = chf('distance');\n\n// Get intrinsic perimeter\nfloat p = primintrinsic(0, 'measuredperimeter', @primnum);\n\n// Clamp distance.\nfloat trim = clamp(dist, 0, p);\n\n// Adjust the primitive length.\nadjustPrimLength(0, @primnum, p, trim);"
+        },
+        "fix_overlaps": {
+            "reference_code": "38465172",
+            "section": "Fix Primitive Overlap",
+            "code": "\"\"\" Fix overlaps. \"\"\";\n\n// Get prim points.\nint prim_pts[] = primpoints(0, @primnum);\n\n// Initialize primitive list.\nint prim_lst[];\n\n// Iterate for each point in the current primitive.\nforeach(int pt; prim_pts){\n    \n    // Get primitives of the current point.\n    int pt_prims[] = pointprims(0, pt);\n    \n    // Iterate for each point primitives.\n    foreach(int prim; pt_prims){\n        \n        // Get primitive position.\n        vector prim_pos = prim(0, \"P\", prim);\n        \n        // Get distance between current pos and prim pos.\n        float dist = distance(v@P, prim_pos);\n        \n        // Append if distance is ok and is not in the prim list.\n        if(dist<1e-5 && find(prim_lst, prim)<0) append(prim_lst, prim);\n    }\n}\n\n// Sort prim list and remove last index.\nprim_lst = sort(prim_lst);\nremoveindex(prim_lst, -1);\n\n// Iterate for each of the overlap faces and remove them.\nforeach(int prim; prim_lst){\n    removeprim(0, prim, 1);\n}"
+        },
+        "attr_to_grp": {
+            "reference_code": "47201184",
+            "section": "Attribute To Group",
+            "code": "\"\"\" Convert attribute pattern to group. \"\"\";\n\n// Get attribute pattern and group name.\nstring attr_pattern = chs(\"attribute_pattern\");\nstring grp_name = chs(\"group_name\");\n\n// Expand attribute pattern.\nint grp[] = expandprimgroup(0, attr_pattern);\n\n// Iterate for each element of the expanded group.\nforeach(int prim; grp){\n\n    // Set prim group.\n    setprimgroup(0, grp_name, prim, 1);\n}"
+        },
+        "expand_prim_grp": {
+            "reference_code": "10643779",
+            "section": "Group Expand",
+            "code": "\"\"\" Expand primitive group. \"\"\";\n\n// Get expand steps. \nint steps = chi(\"steps\");\n\n// Get group name and get primitives in the group.\nstring prim_grp = chs(\"primitive_group\");\nint prims[] = expandprimgroup(0, prim_grp);\n\n// Initialize previous primitive group.\nint prev[] = array(@primnum);\n\n// Check if the current primitive is in the group.\nif(find(prims, @primnum)>=0){\n    \n    // Iterate for each of the steps.\n    for(int i=0; i<steps; i++){\n        \n        // Initialize connected prims array.\n        int step_conn[];\n        \n        // Interate for each previous primitive.\n        foreach(int a; prev){\n            \n            // Get points from primitive.\n            int prim_pts[] = primpoints(0, a);\n            \n            // Initialize adjacent prims and iterate for each point.\n            int adj[];\n            foreach(int pt; prim_pts){\n            \n                // Get primitives from points and append them to adj.\n                int pt_prims[] = pointprims(0, pt);\n                foreach(int prim; pt_prims){\n                    append(adj, prim);\n                }\n            }\n            \n            // Iterate for each of adjacent primitives.\n            foreach(int prim; adj){\n                if(find(prims, prim)<0 && find(prev, prim)<0 && find(step_conn, prim)<0){\n                    \n                    // Append primitive to setp_conn and set prim group.\n                    append(step_conn, prim);\n                    setprimgroup(0, prim_grp, prim, 1);  \n                }     \n            }\n        }\n        \n        // Update last step prims.\n        prev = step_conn;    \n    } \n}"
+        },
+        "flat_edges": {
+            "reference_code": "50168045",
+            "section": "Group Flat Edges",
+            "code": "\"\"\" Group flat edges. \"\"\";\n\n// Get number of points for current primitive.\nint npts = len(primpoints(0, @primnum));\n\n// Get first half edge.\nint hedge = primhedge(0, @primnum);\n\n// Iterate for each of the prim points.\nfor(int i=0; i<npts; i++){\n    \n    // Get next equivalent half edge and its primitive.\n    int next_equiv = hedge_nextequiv(0, hedge);\n    int prim = hedge_prim(0, next_equiv);\n    \n    // Get equivalent edge prim position.\n    vector equiv_pos = prim(0, \"P\", prim);\n    \n    // Get source and destiny points.\n    int src_pt = hedge_srcpoint(0, hedge);\n    int dst_pt = hedge_dstpoint(0, hedge);\n    \n    // Get position from source and destiny positions.\n    vector src_pos = point(0, \"P\", src_pt);\n    vector dst_pos = point(0, \"P\", dst_pt);\n    \n    // Get the middle point between destiny and source.\n    vector mid_pt = (dst_pos+src_pos)/2;\n    \n    // Get edge direction vector.\n    vector hedge_dir = normalize(dst_pos-src_pos);\n    \n    // Get get prim and equiv prim direction vector.\n    vector prim_dir = normalize(equiv_pos-v@P);\n    \n    // Compute the cross vector between half edge dir and prim dir.\n    vector ref_vec = normalize(cross(hedge_dir, prim_dir));\n    \n    // Get direction vector between edge mid point, current position \n    // and equivalent prim position.\n    vector curr_vec = normalize(mid_pt-v@P);\n    vector equiv_vec = normalize(mid_pt-equiv_pos);    \n    \n    // Check the dot product using the reference vector. \n    // 0.01 is used as a threshold value because dot product outputs really small values.\n    if(abs(dot(ref_vec, curr_vec))<0.01 && abs(dot(ref_vec, equiv_vec))<0.01){\n        \n        // Set edge group using source and destiny points.\n        setedgegroup(0, \"flat_edge\", src_pt, dst_pt, 1);\n    }\n    \n    // Update to next half edge.\n    hedge = hedge_next(0, hedge);\n}"
+        },
+        "unshared_points": {
+            "reference_code": "25639790",
+            "section": "Group Unshared Points",
+            "code": "\"\"\" Group unshared points. \"\"\";\n\n// Get amount of points composing the current primitive.\nint pts = len(primpoints(0, @primnum));\n\n// Get initial half edge of the current primitive.\nint init_hedge = primhedge(0, @primnum);\n\n// Iterate as many times as points the primitive has.\nfor(int i=0; i<pts; i++){\n\n    // Get next equivalent (opposite half edge) of the current half edge.\n    int equiv = hedge_nextequiv(0, init_hedge);\n    \n    // Get primitive number that contains the equivalent half edge.\n    int prim = hedge_prim(0, equiv);\n\n    // If the opposite primitive is the same as current, it means\n    // that it doesn't have another primitive connected.\n    if(prim==@primnum){\n    \n        // Check for the destiny and source point for the half edge.\n        int pt_dst = hedge_dstpoint(0, equiv);\n        int pt_src = hedge_srcpoint(0, equiv);\n        \n        // Set unshared point group.\n        setpointgroup(0, \"unshared\", pt_dst, 1);\n        setpointgroup(0, \"unshared\", pt_src, 1);\n    }\n    \n    // Once iteration is finished, move to the next half edge of the \n    // same primitive.\n    init_hedge = hedge_next(0, init_hedge);\n}"
+        },
+        "unique_points": {
+            "reference_code": "479350",
+            "section": "Inset Primitive",
+            "code": "\"\"\" Unique points to split primitives. \"\"\";\n\n// Get prim position and its points.\nvector prim_pos = v@P;\nint prim_pts[] = primpoints(0, @primnum);\n\n// Initialize point array.\nint pts[];\n\n// Iterate for each point in the primitive.\nforeach(int pt; prim_pts){\n\n    // Get current point position and normal.\n    vector pt_pos = point(0, \"P\", pt);\n    vector normal = point(0, \"N\", pt);\n    \n    // Create the new point and set the normal.\n    int new_pt = addpoint(0, pt_pos);\n    setpointattrib(0, \"N\", new_pt, normal);\n    \n    // Append current point to the points array.\n    append(pts, new_pt);\n}\n\n// Create new primitive and remove current one. \naddprim(0, \"poly\", pts);\nremoveprim(0, @primnum, 1);"
+        },
+        "trans_packed": {
+            "reference_code": "61834389",
+            "section": "Transform Packed Objects",
+            "code": "\"\"\" Transform packed objects. \"\"\";\n\n// Get translation, rotation and scale values.\nvector trans = chv(\"translate\");\nvector rot = chv(\"rotation\");\nvector scale = chv(\"scale\");\n\n// Create matrix with retrieved information.\nmatrix m = maketransform(0,0,trans,rot,scale);\n\n// Get packed transformations from first primitive.\nmatrix old_xform = getpackedtransform(0, @primnum);\n\n// Set packed transformations.\nsetpackedtransform(0, @primnum, old_xform*m);"
+        },
+        "get_distance": {
+            "reference_code": "89906276",
+            "section": "Normalize Distance",
+            "code": "\"\"\" Get the distance for each of the points. \"\"\";\n\n// Get position from the second input.\nvector pos = point(1, \"P\", 0);\n\n// Get distance between current point and input 2 positon.\nfloat dist = distance(pos, v@P);\n\n// Set distance attribute.\nf@dist = dist;"
+        },
+        "normalize_distance": {
+            "reference_code": "89906276",
+            "section": "Normalize Distance",
+            "code": "\"\"\" Normalize distance using the computed max distance. \"\"\";\n\n// Get max distance from detail.\nfloat max_dist = detail(0, \"max_dist\"); \n\n// Normalize distance.\nfloat norm_dist = f@dist/max_dist;\n\n// Set color attrivute to show the normalized distance.\nv@Cd = chramp(\"color\", norm_dist);"
+        }
+    },
+    "VEX Shader": {
+        "lens_shader": {
+            "reference_code": "77666090",
+            "section": "STMap Lens Shader",
+            "code": "\"\"\" Camera lens shader based on STMap. \"\"\";\n\n// x and y is on a -1 to 1 space, we need to switch to ndc.\nfloat ox = fit(x, -1, 1, 0, 1);\nfloat oy = fit(y, -1, 1, 0, 1);\n\n// Get color from the STMap and move distortion to center.\nvector c = colormap(file, ox, oy)-0.5;\n\n// Set postion.\n$P = set(0, 0, 0);\n\n// Set ray direction and length based on focus length and aperture.\n$I = set(c.x, c.y / aspect, (fo/ap));"
+        }
+    },
+    "Volume": {
+        "norm_density": {
+            "reference_code": "86444637",
+            "section": "Normalize Density Attribute",
+            "code": "\"\"\" Normalize density value. \"\"\";\n\n// Get maximum and minimum volume value.\nfloat max_den = primintrinsic(0, \"volumemaxvalue\", 0);\nfloat min_den = primintrinsic(0, \"volumeminvalue\", 0);\n\n// Fit values and normalize them.\nfloat den = fit(f@density, min_den, max_den, 0, 1);\n\n// Export density attribute.\nf@density = den;"
+        },
+        "remap_density": {
+            "reference_code": "22887045",
+            "section": "Remap Density Reference Point",
+            "code": "\"\"\" Remap the density based on reference point. \"\"\";\n\n// Initialize amplitude and frequency values.\nfloat amp = chf(\"amplitude\");\nfloat freq = chf(\"frequency\");\n\n// Get renferece point position.\nvector pos = point(1, \"P\", 0);\n\n// Get current position and add noise to it if user inputs amplitude.\nvector curr_pos = v@P+noise(v@P*freq)*amp;\n\n// Get distance between curr_pos and pos. Remap distance to fit desired values.\nfloat dist = distance(curr_pos, pos);\ndist = fit(dist, 0, chf(\"max_distance\"), 0, 1);\ndist = chramp(\"distance\", dist);\n\n// Multiply density by distance.\nf@density*=dist;"
+        },
+        "voxel_index": {
+            "reference_code": "8712550",
+            "section": "Voxel Index And Rest",
+            "code": "\"\"\" Compute rest and index values for volumes. \"\"\";\n\n// Create point for each voxel.\nint pt = addpoint(0, v@P);\n\n// Convert position to rest position.\nvector index = volumepostoindex(0, 0, v@P);\n\n// Store rest position.\nsetpointattrib(0, \"rest\", pt, v@P);\n\n// Create index for each axis and export it as integer.\nsetpointattrib(0, \"ix\", pt, int(index.x));\nsetpointattrib(0, \"iy\", pt, int(index.y));\nsetpointattrib(0, \"iz\", pt, int(index.z));\n\n// Set density to 0 to be able to generate geometry.\n@density=0;"
+        }
+    }
+}

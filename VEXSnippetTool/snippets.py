@@ -6,14 +6,8 @@ import hou
 from vex_formatting import VEXSyntaxHighlighter
 import socket
 import webbrowser
+from request_git import get_snippets_for_library
 
-try:
-    from request_git import get_snippets_for_library
-except:
-    hou.ui.displayMessage(
-                "You need to fullfill the requirements for the complete usage of this app. Please install: requests",
-                severity=hou.severityType.Warning
-            )
 
 # Define snippet categories
 SNIPPET_TYPE = ['Point', 'Primitives', 'Detail', 'Vertex', 'Numbers', 'Volumes', 'DOPS']
@@ -21,14 +15,8 @@ SNIPPET_TYPE = ['Point', 'Primitives', 'Detail', 'Vertex', 'Numbers', 'Volumes',
 # Define publish methods
 PUBLISH = ['Personal', 'Snippet Library']
 
-# Get folder location based on publish selection
-def snippet_loaction_path(location):
-    if location == "Personal":
-        hou_home = hou.text.expandString("$HOUDINI_USER_PREF_DIR") + "/VEXSnippets/"
-    else:
-        hou_home = os.path.dirname(os.path.abspath(__file__))
-        
-    return hou_home 
+# Define node types
+NODE_TYPES = ["gaswrangle", "attribwrangle", "popwrangle", "geometrywrangle"]
 
 # UI class for saving snippets
 class saveSnippet(QtWidgets.QWidget):
@@ -43,7 +31,7 @@ class saveSnippet(QtWidgets.QWidget):
         super(saveSnippet, self).__init__(parent=parent)
 
         # Initialize window properties
-        self.setWindowTitle("Snippet Publisher v0.0.0")
+        self.setWindowTitle("Snippet Publisher v0.0.4")
         self.setWindowFlags(self.windowFlags() | QtCore.Qt.Window)
         self.resize(500, 200)
 
@@ -86,9 +74,9 @@ class saveSnippet(QtWidgets.QWidget):
     def get_savepath(self):
         data = {}
         code_name = self.uiSave.type_combo.currentText()
-        self.local_vexStash = hou.text.expandString("$HOUDINI_USER_PREF_DIR") + "/VEXSnippets/"
+        self.vex_path = hou.text.expandString("$HOUDINI_USER_PREF_DIR") + "/VEXSnippets/"
         
-        file_path = os.path.abspath(os.path.join(self.local_vexStash,
+        file_path = os.path.abspath(os.path.join(self.vex_path,
                                     code_name,
                                     'vex_snippet.json'))
         
@@ -156,12 +144,12 @@ class loadSnippet(QtWidgets.QWidget):
         self.setWindowFlags(self.windowFlags() | QtCore.Qt.Window)
         self.resize(1000, 500)
 
-        self.local_vexStash = os.path.dirname(os.path.abspath(__file__))
+        self.vex_path = os.path.dirname(os.path.abspath(__file__))
         self.parm = parm
         self.current_code = ''
+        self.prev_sel_list = ''
         
         self.create_ui()
-        self.load_from()
         self.get_types()
         self.installEventFilter(self)
         
@@ -211,11 +199,13 @@ class loadSnippet(QtWidgets.QWidget):
         
         self.setup_connections()
         self.syntax_highlighter = VEXSyntaxHighlighter(self.ui.code.document())
+        self.ui.loadfrom.addItems(PUBLISH)
 
     # Setup all signal connections
     def setup_connections(self):
         # Connect UI signals to their handlers
         self.ui.loadfrom.currentTextChanged.connect(self.contextFiles)
+        self.ui.loadfrom.currentTextChanged.connect(self.get_types)
         self.ui.loadfrom.currentTextChanged.connect(self.update_workgroup_buttons_state)
         self.ui.loadfrom.currentTextChanged.connect(self.get_snippet_names)
         self.ui.node_list.currentTextChanged.connect(self.get_snippet_names)
@@ -232,6 +222,8 @@ class loadSnippet(QtWidgets.QWidget):
         self.ui.github_btn.clicked.connect(self.open_github)
         self.ui.wifi_btn.clicked.connect(self.handle_wifi_toggle)
         self.ui.new_code_btn.clicked.connect(self.open_save_snippet)
+        self.ui.github_btn.pressed.connect(self.github_btn_pressed)
+        self.ui.github_btn.released.connect(self.github_btn_released)
         
         # Set initial button states
         self.ui.append_btn.setEnabled(False)
@@ -263,9 +255,7 @@ class loadSnippet(QtWidgets.QWidget):
             
             self.ui.github_btn.setFlat(True)
             self.ui.github_btn.setStyleSheet("border: none; background: none;")
-            
-            self.ui.github_btn.pressed.connect(self.github_btn_pressed)
-            self.ui.github_btn.released.connect(self.github_btn_released)
+
 
     # Setup WiFi button appearance
     def setup_wifi_button(self):
@@ -319,6 +309,8 @@ class loadSnippet(QtWidgets.QWidget):
 
     # Get types of snippets
     def get_types(self):
+        current_selection = self.ui.node_list.currentText()
+        
         self.ui.node_list.clear()
         
         if self.ui.loadfrom.currentText() == "Snippet Library":
@@ -329,7 +321,7 @@ class loadSnippet(QtWidgets.QWidget):
                         severity=hou.severityType.Warning
                     )
                 else:
-                    readme_path = os.path.join(self.local_vexStash, 'readme_sections.json')
+                    readme_path = os.path.join(self.vex_path, 'readme_sections.json')
                     if not os.path.exists(readme_path):
                         try:
                             with open(readme_path, 'w') as f:
@@ -348,7 +340,7 @@ class loadSnippet(QtWidgets.QWidget):
                         except Exception as e:
                             print(f"Error updating from git: {e}")
                 
-                readme_path = os.path.join(self.local_vexStash, 'readme_sections.json')
+                readme_path = os.path.join(self.vex_path, 'readme_sections.json')
                 with open(readme_path, 'r') as f:
                     data = json.load(f)
                 
@@ -356,23 +348,36 @@ class loadSnippet(QtWidgets.QWidget):
                 categories.sort()
                 
                 self.ui.node_list.addItems(categories)
+
+                index = self.ui.node_list.findText(current_selection, QtCore.Qt.MatchFixedString)
+
+                if index >=0:
+                    self.ui.node_list.setCurrentIndex(index)
                 
             except Exception as e:
                 print(f"Error loading categories: {e}")
         else:
             try:
-                self.nodes = os.listdir(self.local_vexStash)
+                self.nodes = os.listdir(self.vex_path)
                 self.ui.node_list.addItems(self.nodes)
+                index = self.ui.node_list.findText(current_selection, QtCore.Qt.MatchFixedString)
+
+                if index >=0:
+                    self.ui.node_list.setCurrentIndex(index)
             except:
                 pass
 
-    # Get types of publish
-    def load_from(self):
-        self.ui.loadfrom.addItems(PUBLISH)
-
     # Add elements to the snippet list name with ID numbers
     def get_snippet_names(self):
+       
         try:
+            current_selection = self.ui.snippet_list.selectedItems()
+            self.prev_sel_list = current_selection[0].text()
+        except:
+            pass
+            
+        try:
+            
             self.ui.snippet_list.clear()
             self.ui.code.clear()
 
@@ -404,6 +409,11 @@ class loadSnippet(QtWidgets.QWidget):
 
                 formatted_titles.sort()
                 self.ui.snippet_list.addItems(formatted_titles)
+                items = self.ui.snippet_list.findItems(self.prev_sel_list, QtCore.Qt.MatchExactly)
+                
+                if len(items) > 0:
+                    items[0].setSelected(True)
+                    self.get_snippet_code()
 
             else:
                 snippet_data = self.get_snippet_data()
@@ -416,27 +426,31 @@ class loadSnippet(QtWidgets.QWidget):
 
                 filtered_keys.sort()
                 self.ui.snippet_list.addItems(filtered_keys)
+                items = self.ui.snippet_list.findItems(self.prev_sel_list, QtCore.Qt.MatchExactly)
+                
+                if len(items) > 0:
+                    items[0].setSelected(True)
+                    self.get_snippet_code()
 
         except Exception as e:
             print(f"Error in get_snippet_names: {e}")
 
-    # Set local_vexStash based on user publish selection
+    # Set vex_path based on user publish selection
     def contextFiles(self):
         if self.ui.loadfrom.currentText() == "Personal":
-            self.local_vexStash = snippet_loaction_path(self.ui.loadfrom.currentText())
+            self.vex_path = hou.text.expandString("$HOUDINI_USER_PREF_DIR") + "/VEXSnippets/"
         else:
-            self.local_vexStash = os.path.dirname(os.path.abspath(__file__))
+            self.vex_path = os.path.dirname(os.path.abspath(__file__))
         
-        self.get_types()
 
     # View snippet code in the text code widget
     def get_snippet_code(self):
         self.ui.code.clear()
-        
+
         try:
             if self.ui.loadfrom.currentText() == "Snippet Library":
                 selected_category = self.ui.node_list.currentText()
-                formatted_name = self.ui.snippet_list.currentItem().text()
+                formatted_name = self.ui.snippet_list.selectedItems()[0].text()
                 snippet_name = formatted_name.split(" (")[0]
                 snippets = get_snippets_for_library(selected_category)
                 
@@ -451,7 +465,7 @@ class loadSnippet(QtWidgets.QWidget):
                     self.ui.new_code_btn.setEnabled(False)
             else:
                 snippet_data = self.get_snippet_data()
-                current_selection = self.ui.snippet_list.currentItem().text()
+                current_selection = self.ui.snippet_list.selectedItems()[0].text()
                 self.current_code = snippet_data[current_selection]
                 self.ui.code.setPlainText(self.current_code)
                 
@@ -470,7 +484,7 @@ class loadSnippet(QtWidgets.QWidget):
         
         if self.ui.loadfrom.currentText() == "Snippet Library":
             try:
-                readme_path = os.path.join(self.local_vexStash, 'readme_sections.json')
+                readme_path = os.path.join(self.vex_path, 'readme_sections.json')
                 with open(readme_path, 'r') as f:
                     data = json.load(f)
                 
@@ -484,7 +498,7 @@ class loadSnippet(QtWidgets.QWidget):
             except:
                 selected_node = ""
 
-            data_file = os.path.abspath(os.path.join(self.local_vexStash, selected_node, 'vex_snippet.json'))
+            data_file = os.path.abspath(os.path.join(self.vex_path, selected_node, 'vex_snippet.json'))
             
             try:
                 with open(data_file, 'r') as f:
@@ -496,40 +510,61 @@ class loadSnippet(QtWidgets.QWidget):
     # Append code to existing snippet
     def append_code(self):
         try:
-            existing_code = self.parm.evalAsString()
-            new_code = "\n".join([existing_code, self.current_code])
-            self.parm.set(new_code)
+            selected_nodes = hou.selectedNodes()
+
+            for node in selected_nodes:
+                
+                self.parm = node.parm("snippet")
+                existing_code = self.parm.evalAsString()
+                if existing_code == "":
+                        new_code = self.current_code
+                        self.parm.set(new_code)
+                else:
+                    new_code = "\n".join([existing_code, self.current_code])
+                    self.parm.set(new_code)
         except:
             selected_nodes = hou.selectedNodes()
-            NODE_TYPES = ["gaswrangle", "attribwrangle", "popwrangle", "geometrywrangle"]
+
             WRANGLER_NODES = []
             for sel_node in selected_nodes:
                 if sel_node.type().name() in NODE_TYPES:
                     WRANGLER_NODES.append(sel_node)
             try:
-                self.parm = WRANGLER_NODES[0].parm('snippet')
-                existing_code = self.parm.evalAsString()
-                new_code = "\n".join([existing_code, self.current_code])
-                self.parm.set(new_code)
+                for node in WRANGLER_NODES:
+                    self.parm = node.parm('snippet')
+                    existing_code = self.parm.evalAsString()
+
+                    if existing_code == "":
+                        new_code = self.current_code
+                        self.parm.set(new_code)
+                    else:
+                        new_code = "\n".join([existing_code, self.current_code])
+                        self.parm.set(new_code)
             except:
                 hou.ui.displayMessage("Select a Wrangler Node to proceed.", severity=hou.severityType.Warning)
-
+        
     # Replace existing code with new snippet
     def replace_code(self):
         try:
-            new_code = self.current_code
-            self.parm.set(new_code)
+            selected_nodes = hou.selectedNodes()
+            
+            for node in selected_nodes:
+                
+                self.parm = node.parm("snippet")
+                new_code = self.current_code
+                self.parm.set(new_code)
         except:
             selected_nodes = hou.selectedNodes()
-            NODE_TYPES = ["gaswrangle", "attribwrangle", "popwrangle", "geometrywrangle"]
+
             WRANGLER_NODES = []
             for sel_node in selected_nodes:
                 if sel_node.type().name() in NODE_TYPES:
                     WRANGLER_NODES.append(sel_node)
             try:
-                self.parm = WRANGLER_NODES[0].parm('snippet')
-                new_code = self.current_code
-                self.parm.set(new_code)
+                 for node in WRANGLER_NODES:
+                    self.parm = node.parm('snippet')
+                    new_code = self.current_code
+                    self.parm.set(new_code)
             except:
                 hou.ui.displayMessage("Select a Wrangler Node to proceed.", severity=hou.severityType.Warning, suppress=hou.confirmType.OverwriteFile)
                 
@@ -549,10 +584,10 @@ class loadSnippet(QtWidgets.QWidget):
             del snippet_data[current_snippet_selection]
             
             if self.ui.loadfrom.currentText() == "Personal":
-                snippet_files = [os.path.abspath(os.path.join(self.local_vexStash, selected_node, 'vex_snippet.json'))]
+                snippet_files = [os.path.abspath(os.path.join(self.vex_path, selected_node, 'vex_snippet.json'))]
             else:
-                work_c = self.local_vexStash + "/" + selected_node + "/vex_snippet.json"
-                snippet_files = [os.path.abspath(os.path.join(snippet_loaction_path("Snippet Library"), selected_node, 'vex_snippet.json')), work_c]
+                work_c = self.vex_path + "/" + selected_node + "/vex_snippet.json"
+                snippet_files = [os.path.abspath(os.path.join(self.vex_path, selected_node, 'vex_snippet.json')), work_c]
 
             for snippet_file in snippet_files:
                 with open(snippet_file, "w") as outfile:
@@ -577,10 +612,10 @@ class loadSnippet(QtWidgets.QWidget):
             snippet_data[current_snippet_selection] = new_vex
             
             if self.ui.loadfrom.currentText() == "Personal":
-                snippet_files = [os.path.abspath(os.path.join(self.local_vexStash, selected_node, 'vex_snippet.json'))]
+                snippet_files = [os.path.abspath(os.path.join(self.vex_path, selected_node, 'vex_snippet.json'))]
             else:
-                work_c = self.local_vexStash + "/" + selected_node + "/vex_snippet.json"
-                snippet_files = [os.path.abspath(os.path.join(snippet_loaction_path("Snippet Library"), selected_node, 'vex_snippet.json')), work_c]
+                work_c = self.vex_path + "/" + selected_node + "/vex_snippet.json"
+                snippet_files = [os.path.abspath(os.path.join(self.vex_path, selected_node, 'vex_snippet.json')), work_c]
 
             for snippet_file in snippet_files:
                 with open(snippet_file, "w") as outfile:
@@ -599,10 +634,10 @@ class loadSnippet(QtWidgets.QWidget):
             snippet_data.pop(current_snippet_selection)
             
             if self.ui.loadfrom.currentText() == "Personal":
-                snippet_files = [os.path.abspath(os.path.join(self.local_vexStash, selected_node, 'vex_snippet.json'))]
+                snippet_files = [os.path.abspath(os.path.join(self.vex_path, selected_node, 'vex_snippet.json'))]
             else:
-                work_c = self.local_vexStash + "/" + selected_node + "/vex_snippet.json"
-                snippet_files = [os.path.abspath(os.path.join(snippet_loaction_path("Snippet Library"), selected_node, 'vex_snippet.json')), work_c]
+                work_c = self.vex_path + "/" + selected_node + "/vex_snippet.json"
+                snippet_files = [os.path.abspath(os.path.join(self.vex_path, selected_node, 'vex_snippet.json')), work_c]
 
             mssg = "Are you sure that you want to remove the displayed code from the library?"
             answer = hou.ui.displayConfirmation(mssg, severity=hou.severityType.Error, suppress=hou.confirmType.OverwriteFile)
@@ -644,25 +679,3 @@ class loadSnippet(QtWidgets.QWidget):
             self.save_snippet_ui.show()
         except Exception as e:
             hou.ui.displayMessage(f"Failed to open Save Snippet UI: {e}", severity=hou.severityType.Error)
-
-    # Refresh text widget
-    def refresh_text_widget(self):
-        self.ui.code.textChanged.disconnect(self.refresh_text_widget)
-        
-        try:
-            cursor = self.ui.code.textCursor()
-            cursor_position = cursor.position()
-            
-            scrollbar = self.ui.code.verticalScrollBar()
-            scroll_position = scrollbar.value()
-            
-            current_text = self.ui.code.toPlainText()
-            self.ui.code.setPlainText(current_text)
-            
-            cursor.setPosition(cursor_position)
-            self.ui.code.setTextCursor(cursor)
-            
-            scrollbar.setValue(scroll_position)
-        
-        finally:
-            self.ui.code.textChanged.connect(self.refresh_text_widget)
