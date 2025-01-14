@@ -140,7 +140,7 @@ class loadSnippet(QtWidgets.QWidget):
         self.comment_format = formats['comment']
 
         # Set window properties
-        self.setWindowTitle("Snippet Loader v0.0.0")
+        self.setWindowTitle("Snippet Loader v0.0.4")
         self.setWindowFlags(self.windowFlags() | QtCore.Qt.Window)
         self.resize(1000, 500)
 
