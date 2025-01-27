@@ -31,7 +31,7 @@ class saveSnippet(QtWidgets.QWidget):
         super(saveSnippet, self).__init__(parent=parent)
 
         # Initialize window properties
-        self.setWindowTitle("Snippet Publisher v0.0.4")
+        self.setWindowTitle("Snippet Publisher v0.0.5")
         self.setWindowFlags(self.windowFlags() | QtCore.Qt.Window)
         self.resize(500, 200)
 
@@ -140,7 +140,7 @@ class loadSnippet(QtWidgets.QWidget):
         self.comment_format = formats['comment']
 
         # Set window properties
-        self.setWindowTitle("Snippet Loader v0.0.4")
+        self.setWindowTitle("Snippet Loader v0.0.5")
         self.setWindowFlags(self.windowFlags() | QtCore.Qt.Window)
         self.resize(1000, 500)
 

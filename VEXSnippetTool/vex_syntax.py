@@ -12,7 +12,7 @@ VEX_KEYWORDS = [
 VEX_FUNCTIONS = [
     # Arrays
     'append', 'argsort', 'array', 'findlowerbound', 'findlowerboundsorted',
-    'findsorted', 'foreach', 'insert', 'isvalidindex', 'len', 'pop', 'push',
+    'findsorted', 'insert', 'isvalidindex', 'len', 'pop', 'push',
     'removeindex', 'removevalue', 'reorder', 'resize', 'reverse', 'slice',
     'sort', 'upush',
 
