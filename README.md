@@ -64,6 +64,9 @@ For a smoother experience, keep the following in mind:
 
 
 ## ⚠️ Known Issues
+### v0.0.5
+Here are some known issues. If you encounter any others, please report them on GitHub: Not known issues.
+  
 ### v0.0.4
 Here are some known issues. If you encounter any others, please report them on GitHub:
 - **Foreach Coloring:** The foreach coloring is not working correctly.
