@@ -65,7 +65,8 @@ For a smoother experience, keep the following in mind:
 
 ## ⚠️ Known Issues
 ### v0.0.5
-Here are some known issues. If you encounter any others, please report them on GitHub: Not known issues.
+Here are some known issues. If you encounter any others, please report them on GitHub:
+- **Latest Wifi Version:** The current no wifi version is not able to retrieve the latest saved VEX Snippet log.
   
 ### v0.0.4
 Here are some known issues. If you encounter any others, please report them on GitHub:
