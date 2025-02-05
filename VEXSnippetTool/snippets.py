@@ -31,7 +31,7 @@ class saveSnippet(QtWidgets.QWidget):
         super(saveSnippet, self).__init__(parent=parent)
 
         # Initialize window properties
-        self.setWindowTitle("Snippet Publisher v0.0.5")
+        self.setWindowTitle("Snippet Publisher v0.0.6")
         self.setWindowFlags(self.windowFlags() | QtCore.Qt.Window)
         self.resize(500, 200)
 
@@ -140,7 +140,7 @@ class loadSnippet(QtWidgets.QWidget):
         self.comment_format = formats['comment']
 
         # Set window properties
-        self.setWindowTitle("Snippet Loader v0.0.5")
+        self.setWindowTitle("Snippet Loader v0.0.6")
         self.setWindowFlags(self.windowFlags() | QtCore.Qt.Window)
         self.resize(1000, 500)
 
@@ -211,6 +211,8 @@ class loadSnippet(QtWidgets.QWidget):
         self.ui.node_list.currentTextChanged.connect(self.get_snippet_names)
         self.ui.refresh.clicked.connect(self.get_types)
         self.ui.refresh.clicked.connect(self.get_snippet_names)
+        self.ui.refresh.clicked.connect(self.toggle_wifi)
+
         self.ui.search_value.textEdited.connect(self.get_snippet_names)
         self.ui.search_value.editingFinished.connect(self.changePolicy)
         self.ui.snippet_list.itemClicked.connect(self.get_snippet_code)
@@ -276,7 +278,7 @@ class loadSnippet(QtWidgets.QWidget):
             self.ui.wifi_btn.setStyleSheet("border: none; background: none;")
 
     # Toggle WiFi icon and show connection status
-    def toggle_wifi(self, show_message=True):
+    def toggle_wifi(self, show_message=False):
         connection = self.check_internet_connection()
         self.ui.wifi_btn.setIcon(self.wifi_on_icon if connection else self.wifi_off_icon)
         
@@ -320,6 +322,7 @@ class loadSnippet(QtWidgets.QWidget):
                         "No internet connection available. Some Snippet Library features may be limited.",
                         severity=hou.severityType.Warning
                     )
+
                 else:
                     readme_path = os.path.join(self.vex_path, 'readme_sections.json')
                     if not os.path.exists(readme_path):
@@ -390,13 +393,16 @@ class loadSnippet(QtWidgets.QWidget):
 
             if self.ui.loadfrom.currentText() == "Snippet Library":
                 selected_category = self.ui.node_list.currentText()
+                self.snippets_cache = {}
                 if not selected_category:
                     return
-
+                
                 if not hasattr(self, 'snippets_cache'):
-                    self.snippets_cache = {}
+                    self.snippets_cache[selected_category] = get_snippets_for_library(selected_category)
+                    
                 if selected_category not in self.snippets_cache:
                     self.snippets_cache[selected_category] = get_snippets_for_library(selected_category)
+                
                 snippets = self.snippets_cache[selected_category]
 
                 formatted_titles = []
@@ -408,6 +414,7 @@ class loadSnippet(QtWidgets.QWidget):
                         formatted_titles.append(formatted_title)
 
                 formatted_titles.sort()
+
                 self.ui.snippet_list.addItems(formatted_titles)
                 items = self.ui.snippet_list.findItems(self.prev_sel_list, QtCore.Qt.MatchExactly)
                 

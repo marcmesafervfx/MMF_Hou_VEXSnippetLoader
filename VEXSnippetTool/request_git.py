@@ -20,19 +20,21 @@ def get_snippets_for_library(workgroup):
 def fetch_github_readme():
     raw_url = "https://raw.githubusercontent.com/marcmesafervfx/MMF_Hou_VEXSnippets/main/README.md"
     
+    # Initialize sections dictionary
+    sections = {
+        "Points": {},
+        "Detail": {},
+        "Primitives": {},
+        "VEX Shader": {},
+        "Volume": {}
+    }
+
     try:
         response = requests.get(raw_url)
         response.raise_for_status()
         readme_content = response.text
         
-        # Initialize sections dictionary
-        sections = {
-            "Points": {},
-            "Detail": {},
-            "Primitives": {},
-            "VEX Shader": {},
-            "Volume": {}
-        }
+        
         
         lines = readme_content.splitlines()
         current_ref_code = None
@@ -111,4 +113,14 @@ def fetch_github_readme():
             return None
             
     except requests.exceptions.RequestException as e:
-        return None
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        json_path = os.path.join(script_dir, 'readme_sections.json')
+        
+        try:
+            with open(json_path, 'r', encoding='utf-8') as json_file:
+                sections = json.load(json_file)
+            
+            return sections
+        except Exception as e:
+            return None
+
